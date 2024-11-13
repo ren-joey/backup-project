@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper
+	namespace="com.delta.dms.community.dao.DiaDao">
+	
+	<select id="countDiaAttachmentPath" resultType="Integer">
+    SELECT COUNT(*)
+    FROM innovation_award_attachment
+    WHERE attachment_path IN
+    <foreach collection="attachmentPath" item="item" index="index" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+  </select>
+  
+	<insert id="insertDia" keyProperty="innovationAwardId" useGeneratedKeys="true">
+		INSERT INTO innovation_award
+		(`classification_name`, `project_item_name`, `oa_instance_code`, `project_executive_summary`, `status`, `apply_time`)
+		VALUES
+		(#{classificationName.value},
+		#{projectItemName},
+		#{oaInstanceCode},
+		#{projectExecutiveSummary},
+		#{status.value},
+		#{applyTime});
+	</insert>
+	
+	<insert id="insertDiaAttachmentPath">
+    INSERT INTO innovation_award_attachment
+    (innovation_award_id, attachment_path)
+    VALUES
+    <foreach collection="path" item="item" index="index" open="(" separator="),(" close=")">
+      #{diaId}, #{item}
+    </foreach>
+  </insert>
+  
+	<insert id="insertDiaMember">
+		INSERT INTO innovation_award_member
+		(innovation_award_id, user_id, user_type)
+		VALUES
+		<foreach collection="member" item="item" index="index" open="(" separator="),(" close=")">
+			#{diaId}, #{item.userId}, #{item.userType.value}
+		</foreach>
+		ON DUPLICATE KEY UPDATE 
+		innovation_award_id = innovation_award_id,
+		user_id = user_id,
+		user_type = user_type
+	</insert>
+	
+	<resultMap type="DiaEntity" id="DiaResultMap">
+    <association property="attachmentPathList" column="{id=innovation_award_id}" select="getDiaAttachmentPathById" />
+    <association property="memberList" column="{id=innovation_award_id}" select="getDiaMemberById" />
+  </resultMap>
+  
+  <select id="getDiaByStatus" resultMap="DiaResultMap">
+    SELECT innovation_award_id
+    FROM innovation_award
+    WHERE `status` = #{status.value}
+  </select>
+  
+  <select id="getDiaById" resultMap="DiaResultMap">
+    SELECT
+    `innovation_award_id`, `classification_name`, `project_item_name`, `oa_instance_code`, `project_executive_summary`, `status`, `apply_time`
+    FROM innovation_award
+    WHERE
+    innovation_award_id = #{id}
+  </select>
+  
+  <select id="getDiaAttachmentPathById" resultType="DiaAttachmentPathEntity">
+    SELECT attachment_path, attachment_path_status
+    FROM
+    innovation_award_attachment
+    WHERE innovation_award_id = #{id}
+  </select>
+  
+  <select id="getDiaMemberById" resultType="DiaMemberEntity">
+    SELECT user_id, user_type
+    FROM
+    innovation_award_member
+    WHERE innovation_award_id = #{id}
+  </select>
+  
+  <update id="updateDiaStatus">
+    UPDATE innovation_award
+    SET `status` = #{status.value}
+    WHERE innovation_award_id IN
+    <foreach collection="id" item="item" index="index" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+  </update>
+  
+  <select id="getDiaAttachmentPathByStatus" resultType="String">
+    SELECT attachment_path
+    FROM innovation_award_attachment
+    WHERE attachment_path_status = #{status.value}
+  </select>
+  
+  <update id="updateDiaAttachmentPathStatus">
+    UPDATE innovation_award_attachment
+    SET attachment_path_status = #{status.value}
+    WHERE attachment_path IN
+    <foreach collection="pathList" item="item" index="index" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+  </update>
+  
+  <select id="getDiaAttachmentWithoutDdf" resultType="DiaAttachmentDetailEntity">
+    SELECT attachment_path, file_name, file_size
+    FROM
+    innovation_award_attachment_ddf
+    WHERE ddf_id = ''
+  </select>
+  
+  <insert id="insertDiaAttachment">
+    INSERT IGNORE INTO innovation_award_attachment_ddf
+    (attachment_path, file_name, file_size)
+    VALUES
+    <foreach collection="fileMap" item="size" index="name" open="(" separator="),(" close=")">
+      #{path}, #{name}, #{size}
+    </foreach>
+  </insert>
+  
+  <update id="updateDiaAttachmentDdfId">
+    UPDATE innovation_award_attachment_ddf
+    SET ddf_id = #{ddfId}
+    WHERE attachment_path = #{path}
+    AND file_name =
+    #{fileName}
+  </update>
+  
+  <select id="getDiaAttachmentDdfIdByPath" resultType="String">
+    SELECT ddf_id
+    FROM innovation_award_attachment_ddf
+    WHERE attachment_path IN
+    <foreach collection="path" item="item" index="index" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+  </select>
+  
+  <insert id="insertSyncDiaAttachmentLog">
+    INSERT INTO sync_dia_attachment_log
+    (start_time, end_time, sync_status, message)
+    VALUES
+    (#{startTime}, #{endTime}, #{status.value}, #{message})
+  </insert>
+  
+  <select id="getDiaLogRecipient" resultType="String">
+    SELECT address
+    FROM sync_dia_log_recipient
+  </select>
+  
+  <update id="updateDiaCreationResult">
+    UPDATE innovation_award
+    SET `status` = #{status.value}, `message` = #{msg}, `create_topic_time` = #{time}
+    WHERE
+    innovation_award_id = #{id}
+  </update>
+</mapper>

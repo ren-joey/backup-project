@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width">
+  <title>DMS Notification</title>
+  <style>
+    body {
+      Margin: 0;
+      padding: 0;
+      background-color: #F8F8F8;
+      -webkit-font-smoothing: antialiased;
+    }
+    table {
+      border: 0;
+      border-collapse: collapse;
+      border-spacing: 0;
+      width: 100%;
+    }
+    td {
+      padding: 0;
+      vertical-align: middle;
+      font-family: -apple-system, '微軟正黑體', sans-serif;
+      font-size: 16px;
+      font-size: 1em;
+      line-height: 1.5;
+      color: #333333;
+    }
+    img {
+      border: 0;
+    }
+    p {
+      Margin: 0;
+      Margin-bottom: 0;
+      font-weight: normal;
+      
+    }
+    a {
+      color: #0087DC;
+      text-decoration: none;
+    }
+    
+    .h1 {
+      font-size: 32px;
+      padding-bottom: 16px;
+    }
+    .h2 {
+      font-size: 1.5em;
+      font-weight: 300;
+    }
+    .h3 {
+      font-size: 1em;
+      font-weight: 600;
+    }
+    .h4 {
+      font-size: 0.875em;
+      font-weight: 600;
+      color: #999999;
+    }
+    .long-title {
+      font-size: 0.875em;
+      padding-bottom: 0;
+    }
+    .caption {
+      font-size: 0.75em;
+    }
+    
+    .text-center {
+      text-align: center;
+    }
+    .text-secondary {
+      color: #8C8C8C;
+    }
+    
+    .spacing {
+      height: 16px;
+      font-size: 16px;
+      line-height: 16px;
+      color: transparent;
+      opacity: 0;
+      visibility: hidden;
+    }
+    .hidden {
+      color: transparent;
+      display: none;
+      max-height: 0;
+      overflow: hidden;
+      mso-hide: all;
+    }
+    
+    .logo {
+      font-weight: 600;
+      font-size: 24px;
+      line-height: 32px;
+      color: #0078DC;
+    }
+    .button {
+      text-align: center;
+      background-color: #0087DC;
+      border: 8px solid #0087DC;
+    }
+    .button.half {
+      width: 50%;
+    }
+    .button.full {
+      width: 100%;
+    }
+    .button a {
+      color: #FFFFFF;
+      font-size: 1.125em;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .button-gap {
+      width: 8px;
+    }
+    
+    /* LAYOUT */
+    .container {
+      width: 100%;
+      height: 100%;
+      Margin: 0 auto;
+      background-color: #F8F8F8;
+    }
+    
+    .page {
+      width: 790px;
+      min-width: 320px;
+      background-color: #FFFFFF;
+      /*Margin-left: auto;
+      /Margin-right: auto;*/
+    }
+    
+    .section {
+      padding-left: 24px;
+      padding-right: 24px;
+    }
+    .section-header {
+      padding-bottom: 16px;
+    }
+    
+    /* SECTION VARIATION */
+    .preheader {
+      background-color: #F8F8F8;
+    }
+    
+    .header {
+      padding-top: 24px;
+      padding-bottom: 24px;
+      background-color: #F8F8F8;
+    }
+    
+    .intro {
+      padding-top: 24px;
+      padding-bottom: 12px;
+      border-top: 4px solid #0078DC;
+    }
+    
+    .content {
+      padding-top: 0px;
+      padding-bottom: 24px;
+      border-top-color: #D9D9D9;
+    }
+    .topic-container {
+      border: 1px solid #D9D9D9;
+      padding: 16px;
+    }
+    .topic {
+      padding-top: 16px;
+      padding-bottom: 16px;
+    }
+    .topic #content td {
+      padding-top: 16px;
+    }
+    .side-padding {
+      width: 16px;
+    }
+    .footer {
+      background-color: #F8F8F8;
+      padding-top: 24px;
+      padding-bottom: 24px;
+    }
+    .footer td {
+      vertical-align: bottom;
+    }
+    .footer a {
+      color: inherit;
+    }
+    
+    /* MOBILE */
+    @media screen and (max-width: 599px) {
+      .hidden-mobile {
+        display: none !important;
+      }
+      .section {
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+      }
+      .preheader {
+        background-color: transparent !important;
+        padding-top: 8px !important;
+        border-bottom-color: #E3E4E6 !important;
+      }
+    }
+
+  </style>
+</head>
+
+<body style="margin: 0;padding: 0;background-color: #F8F8F8;-webkit-font-smoothing: antialiased;">
+  <!-- Preview Text -->
+  <span style="color: transparent; display: none !important; height: 0; max-height: 0; max-width: 0; opacity: 0; overflow: hidden; mso-hide: all; visibility: hidden; width: 0;"></span>
+  <table class="container" style="border: 0;border-collapse: collapse;border-spacing: 0;width: 100%;height: 100%;margin: 0 auto;background-color: #F8F8F8;"><tr><td style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;">&nbsp;</td>
+    <td class="page" style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;width: 790px;min-width: 320px;background-color: #FFFFFF;"><table style="border: 0;border-collapse: collapse;border-spacing: 0;width: 100%;">
+      <tr><td class="header section" style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;padding-left: 24px;padding-right: 24px;padding-top: 24px;padding-bottom: 24px;background-color: #F8F8F8;">
+        <table style="border: 0;border-collapse: collapse;border-spacing: 0;width: 100%;"><tr>
+          <td style="text-align: center;padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;">
+            <img src="cid:logo.png" width="160" height="33" alt="Delta DMS" class="logo" style="border: 0;font-weight: 600;font-size: 24px;line-height: 32px;color: #0078DC;">
+          </td>
+          <td class="text-right" style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;">
+            
+          </td>
+        </tr></table>
+      </td></tr>
+      <tr><td class="intro section" style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;padding-left: 24px;padding-right: 24px;padding-top: 24px;padding-bottom: 12px;border-top: 4px solid #0078DC;">
+        <p id="notification" class="h1 long-title" style="margin: 0;margin-bottom: 0;font-weight: normal;font-size: 0.875em;padding-bottom: 0;">${context.getEnglishDesc()}</p>
+        <p id="notification-zh" class="h1 long-title" style="margin: 0;margin-bottom: 0;font-weight: normal;font-size: 0.875em;padding-bottom: 0;">${context.getDesc()}</p>
+      </td></tr>
+      <tr><td class="content section" style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;padding-left: 24px;padding-right: 24px;padding-top: 0px;padding-bottom: 24px;border-top-color: #D9D9D9;">
+        <table class="topic-container" style="border: 1px solid #D9D9D9;border-collapse: collapse;border-spacing: 0;width: 100%;padding: 16px;"><tr>
+          <td class="side-padding" style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;width: 16px;">&nbsp;</td>
+          <td class="topic" style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;padding-top: 16px;padding-bottom: 16px;">
+          	#if(${context.getParam()})
+	          	#if(${context.getParam().get("subTitle")})
+            	<p id="title-s" class="h4" style="margin: 0;margin-bottom: 0;font-weight: 600;font-size: 0.875em;color: #999999;">${context.getParam().get("subTitle")}</p>
+            	#end
+            	#if(${context.getParam().get("title")})
+            	<p id="title" class="h3" style="margin: 0;margin-bottom: 0;font-weight: 600;font-size: 1em;">${context.getParam().get("title")}</p>
+            	#end
+            #end
+            #if(!$StringUtils.isEmpty(${context.getContent()}))
+            <table id="content" style="border: 0;border-collapse: collapse;border-spacing: 0;width: 100%;"><tr><td style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;padding-top: 16px;">
+              ${context.getContent()}
+            </td></tr></table>
+            #end
+          </td>
+          <td class="side-padding" style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;width: 16px;">&nbsp;</td>
+        </tr>
+        </table>
+      </td></tr>
+      <tr><td class="content section" style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;padding-left: 24px;padding-right: 24px;padding-top: 0px;padding-bottom: 24px;border-top-color: #D9D9D9;">
+        <table style="border: 0;border-collapse: collapse;border-spacing: 0;width: 100%;"><tr>
+          <td class="button half" style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;text-align: center;background-color: #0087DC;border: 8px solid #0087DC;width: 50%;">
+            <a href="${context.getLink()}" style="color: #FFFFFF;text-decoration: none;font-size: 1.125em;font-weight: 600;">Open on PC</a>
+          </td>
+          <td class="button-gap" style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;width: 8px;">&nbsp;</td>
+          <td class="button half" style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;text-align: center;background-color: #0087DC;border: 8px solid #0087DC;width: 50%;">
+            <a href="${context.getMobileLink()}" style="color: #FFFFFF;text-decoration: none;font-size: 1.125em;font-weight: 600;">Open in APP</a>
+          </td>
+        </tr></table>
+      </td></tr>
+      <tr><td class="content section text-center" style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;text-align: center;padding-left: 24px;padding-right: 24px;padding-top: 0px;padding-bottom: 24px;border-top-color: #D9D9D9;">
+        <br>
+        <p class="caption" style="margin: 0;margin-bottom: 0;font-weight: normal;font-size: 0.75em;">${currentTime}</p>
+      </td></tr>
+      <tr><td class="footer section text-center" style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;text-align: center;padding-left: 24px;padding-right: 24px;background-color: #F8F8F8;padding-top: 24px;padding-bottom: 24px;">
+        <p class="caption" style="margin: 0;margin-bottom: 0;font-weight: normal;font-size: 0.75em;">This notification is sent from DMS.</p>
+        <p class="caption text-secondary" style="margin: 0;margin-bottom: 0;font-weight: normal;font-size: 0.75em;color: #8C8C8C;">這是從 DMS 傳送的通知</p>
+      </td></tr>
+    </table></td>
+  <td style="padding: 0;vertical-align: middle;font-family: -apple-system, '微軟正黑體', sans-serif;font-size: 1em;line-height: 1.5;color: #333333;">&nbsp;</td></tr></table>
+</body>
+</html>

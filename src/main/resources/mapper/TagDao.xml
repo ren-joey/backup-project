@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.TagDao">
+  <select id="getTags" resultType="com.delta.dms.community.swagger.model.Tag">
+    SELECT DISTINCT forum_tag as label
+    FROM dms_community.forum_tag
+    WHERE
+    forum_tag like ""#{q}"%"
+    AND
+    forum_tag NOT IN
+    <foreach item="item" index="index" collection="exclude" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+    GROUP BY forum_tag
+    <if test="limit >= 0">
+      LIMIT #{limit}
+    </if>
+  </select>
+</mapper>

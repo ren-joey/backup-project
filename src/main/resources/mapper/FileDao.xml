@@ -1,0 +1,327 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.FileDao">
+  <sql id="selectStatus">
+    IF(users.status = 0, 'active', 'inactive') AS `status`
+  </sql>
+  
+  <select id="getFilePrivilegeUpdateList" resultType="hashMap">
+    SELECT file_id as fileId, member, admin
+    FROM dms_community.file_privilege
+  </select>
+
+  <select id="getAttachmentOfCommunity" resultType="String">
+    SELECT DISTINCT(attachment_id)
+    FROM dms_community.topic_attachment
+    WHERE topic_id IN (SELECT topic_id FROM dms_community.topics WHERE forum_id IN (
+    	SELECT forum_id 
+    	FROM dms_community.forums 
+    	WHERE community_id=#{communityId} 
+    		  AND forum_status != 'delete'
+		    <if test="isDL==true">
+			  AND FIND_IN_SET (forum_id , #{allowForumId})
+			</if>
+    ) AND topic_status != 'delete')
+    UNION
+    SELECT DISTINCT(attachment_id)
+    FROM dms_community.reply_attachment
+    WHERE reply_id IN (SELECT reply_id FROM dms_community.replies WHERE forum_id IN (
+    	SELECT forum_id 
+    	FROM dms_community.forums 
+    	WHERE community_id=#{communityId} 
+    		  AND forum_status != 'delete'
+		    <if test="isDL==true">
+			  AND FIND_IN_SET (forum_id , #{allowForumId})
+			</if>
+    ) AND reply_status != 'delete')
+  </select>
+
+  <select id="getOwnAttachmentOfCommunity" resultType="String">
+    SELECT DISTINCT(attachment_id)
+    FROM (
+    SELECT attachment_id, file_name, file_icon, ext_order, user_created_time
+    FROM (
+    SELECT DISTINCT(f.forum_id),
+    CASE
+    WHEN f.forum_type = "system" THEN 1
+    WHEN f.forum_type = "public" THEN 1
+    WHEN f.forum_type = "private" THEN
+    CASE
+    WHEN #{isSysAdmin} THEN 1
+    WHEN cr_role.role_id = 1 THEN 1
+    WHEN fr_role.role_id = 3 THEN 1
+    WHEN fr_role.role_id = 4 THEN 1
+    ELSE 0
+    END
+    ELSE 0
+    END as has_permission
+    FROM forums f
+    LEFT JOIN (
+        SELECT cr.community_id, cr.role_id, users.user_id
+        FROM dms_community.community_role cr
+          INNER JOIN dms_community.v_user_w_group as users on cr.group_id = users.gid
+        WHERE cr.community_id = #{communityId} AND FIND_IN_SET(users.user_id, #{userId})
+      ) AS cr_role ON f.community_id  = cr_role.community_id
+    LEFT JOIN (
+        SELECT forums.community_id, forums.forum_id, fr.role_id, fusers.user_id
+        FROM dms_community.forum_role fr
+          INNER JOIN dms_community.v_user_w_group as fusers on fr.group_id = fusers.gid
+          INNER JOIN dms_community.forums ON forums.forum_id = fr.forum_id
+        WHERE forums.community_id = #{communityId} AND FIND_IN_SET(fusers.user_id, #{userId})
+      ) AS fr_role ON f.forum_id  = fr_role.forum_id
+    INNER JOIN communities c ON f.community_id = c.community_id
+    WHERE c.community_id = #{communityId} AND f.forum_status != "delete"
+    ) pr,
+    topics t
+    INNER JOIN topic_attachment
+    ON t.topic_id=topic_attachment.topic_id
+    LEFT JOIN dms_community.file_extension_order
+    ON topic_attachment.file_ext = file_extension_order.file_ext
+    WHERE pr.has_permission = 1 AND t.topic_status != "delete" AND pr.forum_id = t.forum_id AND topic_attachment.attachment_status = 'open'
+	    <if test="isDL==true">
+		  AND FIND_IN_SET (pr.forum_id , #{allowForumId})
+		</if>
+    UNION
+    SELECT attachment_id, file_name, file_icon, ext_order, user_created_time
+    FROM (
+    SELECT DISTINCT(f.forum_id),
+    CASE
+    WHEN f.forum_type = "system" THEN 1
+    WHEN f.forum_type = "public" THEN 1
+    WHEN f.forum_type = "private" THEN
+    CASE
+    WHEN #{isSysAdmin} THEN 1
+    WHEN cr_role.role_id = 1 THEN 1
+    WHEN fr_role.role_id = 3 THEN 1
+    WHEN fr_role.role_id = 4 THEN 1
+    ELSE 0
+    END
+    ELSE 0
+    END as has_permission
+    FROM forums f
+      LEFT JOIN (
+        SELECT cr.community_id, cr.role_id, users.user_id
+        FROM dms_community.community_role cr
+          INNER JOIN dms_community.v_user_w_group as users on cr.group_id = users.gid
+        WHERE cr.community_id = #{communityId} AND FIND_IN_SET(users.user_id, #{userId})
+      ) AS cr_role ON f.community_id  = cr_role.community_id
+    LEFT JOIN (
+      SELECT forums.community_id, forums.forum_id, fr.role_id, fusers.user_id
+      FROM dms_community.forum_role fr
+        INNER JOIN dms_community.v_user_w_group as fusers on fr.group_id = fusers.gid
+        INNER JOIN dms_community.forums ON forums.forum_id = fr.forum_id
+      WHERE forums.community_id = #{communityId} AND FIND_IN_SET(fusers.user_id, #{userId})
+    ) AS fr_role ON f.forum_id  = fr_role.forum_id
+    INNER JOIN communities c ON f.community_id = c.community_id
+    WHERE c.community_id = #{communityId} AND f.forum_status != "delete"
+    ) pr,
+    replies r
+    INNER JOIN reply_attachment
+    ON r.reply_id=reply_attachment.reply_id
+    LEFT JOIN dms_community.file_extension_order
+    ON reply_attachment.file_ext = file_extension_order.file_ext
+    WHERE pr.has_permission = 1 AND r.reply_status != "delete" AND pr.forum_id = r.forum_id AND reply_attachment.attachment_status = 'open'
+	    <if test="isDL==true">
+		  AND FIND_IN_SET (pr.forum_id , #{allowForumId})
+		</if>
+    ) attachment
+    <choose>
+      <when test="fileExt != null and fileExt.contains('OTHER')">
+        WHERE FIND_IN_SET(file_icon, #{fileExt}) OR file_icon IS NULL
+      </when>
+      <when test="fileExt != null and fileExt != ''">
+        WHERE FIND_IN_SET(file_icon, #{fileExt})
+      </when>
+    </choose>
+    ORDER BY ${sortField} ${sortOrder}, file_name ASC
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset},#{limit}
+    </if>
+  </select>
+
+  <select id="countOwnAttachmentOfCommunity" resultType="Integer">
+    SELECT COUNT(DISTINCT(attachment_id))
+    FROM (
+    SELECT attachment_id, file_icon
+    FROM (
+    SELECT DISTINCT(f.forum_id),
+    CASE
+    WHEN f.forum_type = "system" THEN 1
+    WHEN f.forum_type = "public" THEN 1
+    WHEN f.forum_type = "private" THEN
+    CASE
+    WHEN #{isSysAdmin} THEN 1
+    WHEN cr_role.role_id = 1 THEN 1
+    WHEN fr_role.role_id = 3 THEN 1
+    WHEN fr_role.role_id = 4 THEN 1
+    ELSE 0
+    END
+    ELSE 0
+    END as has_permission
+    FROM forums f
+      LEFT JOIN (
+        SELECT cr.community_id, cr.role_id, users.user_id
+        FROM dms_community.community_role cr
+          INNER JOIN dms_community.v_user_w_group as users on cr.group_id = users.gid
+        WHERE cr.community_id = #{communityId} AND FIND_IN_SET(users.user_id, #{userId})
+      ) AS cr_role ON f.community_id  = cr_role.community_id
+      LEFT JOIN (
+        SELECT forums.community_id, forums.forum_id, fr.role_id, fusers.user_id
+        FROM dms_community.forum_role fr
+          INNER JOIN dms_community.v_user_w_group as fusers on fr.group_id = fusers.gid
+          INNER JOIN dms_community.forums ON forums.forum_id = fr.forum_id
+        WHERE forums.community_id = #{communityId} AND FIND_IN_SET(fusers.user_id, #{userId})
+      ) AS fr_role ON f.forum_id  = fr_role.forum_id
+    INNER JOIN communities c ON f.community_id = c.community_id
+    WHERE c.community_id = #{communityId} AND f.forum_status != "delete"
+    <if test="isDL==true">
+	  AND FIND_IN_SET (f.forum_id , #{allowForumId})
+	</if>
+    ) pr,
+    topics t
+    INNER JOIN topic_attachment
+    ON t.topic_id=topic_attachment.topic_id
+    LEFT JOIN dms_community.file_extension_order
+    ON topic_attachment.file_ext = file_extension_order.file_ext
+    WHERE pr.has_permission = 1 AND t.topic_status != "delete" AND pr.forum_id = t.forum_id AND topic_attachment.attachment_status = 'open'
+    UNION
+    SELECT attachment_id, file_icon
+    FROM (
+    SELECT DISTINCT(f.forum_id),
+    CASE
+    WHEN f.forum_type = "system" THEN 1
+    WHEN f.forum_type = "public" THEN 1
+    WHEN f.forum_type = "private" THEN
+    CASE
+    WHEN #{isSysAdmin} THEN 1
+    WHEN cr_role.role_id = 1 THEN 1
+    WHEN fr_role.role_id = 3 THEN 1
+    WHEN fr_role.role_id = 4 THEN 1
+    ELSE 0
+    END
+    ELSE 0
+    END as has_permission
+    FROM forums f
+    LEFT JOIN (
+      SELECT cr.community_id, cr.role_id, users.user_id
+      FROM dms_community.community_role cr
+        INNER JOIN dms_community.v_user_w_group as users on cr.group_id = users.gid
+      WHERE cr.community_id = #{communityId} AND FIND_IN_SET(users.user_id, #{userId})
+    ) AS cr_role ON f.community_id  = cr_role.community_id
+    LEFT JOIN (
+      SELECT forums.community_id, forums.forum_id, fr.role_id, fusers.user_id
+      FROM dms_community.forum_role fr
+        INNER JOIN dms_community.v_user_w_group as fusers on fr.group_id = fusers.gid
+        INNER JOIN dms_community.forums ON forums.forum_id = fr.forum_id
+      WHERE forums.community_id = #{communityId} AND FIND_IN_SET(fusers.user_id, #{userId})
+    ) AS fr_role ON f.forum_id  = fr_role.forum_id
+    INNER JOIN communities c ON f.community_id = c.community_id
+    WHERE c.community_id = #{communityId} AND f.forum_status != "delete"
+    ) pr,
+    replies r
+    INNER JOIN reply_attachment
+    ON r.reply_id=reply_attachment.reply_id
+    LEFT JOIN dms_community.file_extension_order
+    ON reply_attachment.file_ext = file_extension_order.file_ext
+    WHERE pr.has_permission = 1 AND r.reply_status != "delete" AND pr.forum_id = r.forum_id AND reply_attachment.attachment_status = 'open'
+    ) attachment
+    <choose>
+      <when test="fileExt != null and fileExt.contains('OTHER')">
+        WHERE FIND_IN_SET(file_icon, #{fileExt}) OR file_icon IS NULL
+      </when>
+      <when test="fileExt != null and fileExt != ''">
+        WHERE FIND_IN_SET(file_icon, #{fileExt})
+      </when>
+    </choose>
+  </select>
+
+  <select id="getAttachmentDetail" resultType="com.delta.dms.community.swagger.model.AttachmentDetail">
+    SELECT attachment.attachment_id AS id, communities.community_id, forums.forum_id, forums.forum_name, UPPER(forums.forum_type) AS forum_type,
+    attachment.user_created_time AS modifiedTime, topics.topic_id, topics.topic_title, attachment.file_name, attachment.file_ext, file_icon
+    FROM
+    dms_community.topics
+    INNER JOIN
+    dms_community.forums
+    ON topics.forum_id = forums.forum_id
+    INNER JOIN
+    dms_community.communities
+    ON forums.community_id = communities.community_id
+    INNER JOIN
+    (
+    SELECT *
+    FROM dms_community.topic_attachment
+    WHERE attachment_id = #{attachmentId}
+    ) attachment
+    ON topics.topic_id = attachment.topic_id
+    LEFT JOIN dms_community.file_extension_order
+    ON attachment.file_ext = file_extension_order.file_ext
+    UNION
+    SELECT attachment.attachment_id AS id, communities.community_id, forums.forum_id, forums.forum_name, UPPER(forums.forum_type) AS forum_type,
+    attachment.user_created_time AS modifiedTime, topics.topic_id, topics.topic_title, attachment.file_name, attachment.file_ext, file_icon
+    FROM
+    dms_community.replies
+    INNER JOIN
+    dms_community.topics
+    ON topics.topic_id = replies.follow_topic_id
+    INNER JOIN
+    dms_community.forums
+    ON replies.forum_id = forums.forum_id
+    INNER JOIN
+    dms_community.communities
+    ON forums.community_id = communities.community_id
+    INNER JOIN
+    (
+    SELECT *
+    FROM dms_community.reply_attachment
+    WHERE attachment_id = #{attachmentId}
+    ) attachment
+    ON replies.reply_id = attachment.reply_id
+    LEFT JOIN dms_community.file_extension_order
+    ON attachment.file_ext = file_extension_order.file_ext
+    LIMIT 1
+  </select>
+
+  <select id="getTopicIdbyAttachmentId" resultType="Integer">
+    SELECT topic_id FROM dms_community.topic_attachment
+    WHERE attachment_id=#{attachmentId}
+  </select>
+
+  <select id="getForumTypeFromTopicbyAttachmentId" resultType="String">
+    SELECT forum_type
+    FROM dms_community.forums
+    WHERE forum_id=(
+    SELECT forum_id FROM
+    dms_community.topics
+    WHERE topic_id = (
+    SELECT topic_id FROM
+    dms_community.topic_attachment WHERE
+    attachment_id=#{attachmentId}));
+  </select>
+
+  <select id="getReplyIdbyAttachmentId" resultType="Integer">
+    SELECT reply_id FROM dms_community.reply_attachment
+    WHERE attachment_id=#{attachmentId}
+  </select>
+
+  <select id="getForumTypeFromReplybyAttachmentId" resultType="String">
+    SELECT forum_type
+    FROM dms_community.forums
+    WHERE forum_id=(
+    SELECT forum_id FROM
+    dms_community.replies
+    WHERE reply_id = (
+    SELECT reply_id
+    FROM dms_community.reply_attachment WHERE
+    attachment_id=#{attachmentId}));
+  </select>
+
+  <select id="getAttachmentAuthor" resultType="com.delta.dms.community.swagger.model.User">
+    SELECT DISTINCT(users.user_id) AS id, cname AS name, <include refid="selectStatus" />, users.mail
+    FROM dms_community.attachment_keyman
+    INNER JOIN dms_community.v_user AS users
+    ON attachment_keyman.user_id = users.user_id
+    WHERE attachment_id = #{attachmentId}
+  </select>
+</mapper>

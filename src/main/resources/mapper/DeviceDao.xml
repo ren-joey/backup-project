@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.DeviceDao">
+
+  <delete id="deleteBadDeviceToken">
+    DELETE FROM dms_community.ios_device
+    WHERE device_token=#{token}
+  </delete>
+
+  <insert id="registerDevice">
+    INSERT INTO dms_community.ios_device(device_uuid, device_token, user_id, language)
+    VALUES (#{deviceUUID}, #{deviceToken}, #{userId}, #{language})
+    ON DUPLICATE KEY UPDATE device_uuid=device_uuid, device_token=#{deviceToken}, user_id=#{userId}, language=#{language}
+  </insert>
+
+  <select id="getDeviceTokenListOfUser" resultType="com.delta.dms.community.swagger.model.DeviceInfo">
+    SELECT DISTINCT device_token, language
+    FROM dms_community.ios_device
+    WHERE user_id=#{userId}
+  </select>
+</mapper>

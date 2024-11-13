@@ -1,0 +1,795 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.CommunityDao">
+  <select id="getCommunityById" resultType="CommunityInfo" parameterType="int">
+    SELECT
+    C.community_id, C.community_name, C.community_desc,
+    C.community_type, C.community_category, C.community_status,
+    C.community_create_user_id,
+    C.community_create_time, C.community_modified_user_id, C.community_modified_time,
+    C.community_delete_user_id, C.community_delete_time, C.community_last_modified_user_id,
+    C.community_last_modified_time, C.community_ddf_id, C.community_group_id,
+    IFNULL(CST.dashboard, 0) AS `dashboard`, IFNULL(CST.community_special_type_name, '') AS `special_type`
+    FROM
+    communities C
+    LEFT JOIN community_support_special_type CSST ON C.community_id = CSST.community_id
+    LEFT JOIN community_special_type CST ON CSST.community_special_type_id = CST.community_special_type_id
+    WHERE
+    C.community_id IN
+    <foreach collection="communityId" item="item" index="index" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+    AND C.community_status != 'delete'
+  </select>
+
+  <select id="getAll" resultType="CommunityInfo" parameterType="int">
+    SELECT
+    community_id, community_name, community_desc,
+    community_type, community_category, community_status,
+    community_create_user_id,
+    community_create_time, community_modified_user_id, community_modified_time,
+    community_delete_user_id, community_delete_time, community_last_modified_user_id,
+    community_last_modified_time
+    FROM
+    dms_community.communities
+  </select>
+
+  <select id="getAllValidDependentCommunity" resultType="CommunityInfo" parameterType="int">
+    select  community_id, community_name, community_status, community_group_id
+    from dms_community.communities
+    where community_status = 'open'
+      and community_group_id != ''
+  </select>
+
+  <insert id="add" keyProperty="communityId" useGeneratedKeys="true">
+    INSERT INTO
+    dms_community.communities
+    (community_name, community_desc, community_type,
+    community_status, community_create_user_id, community_create_time,
+    community_last_modified_user_id, community_last_modified_time, community_category,
+    community_img_banner, community_img_avatar, community_modified_user_id,
+    community_modified_time, community_delete_user_id, community_delete_time,
+    community_group_id, community_ddf_id)
+    VALUES (#{communityName}, #{communityDesc}, #{communityType},
+    #{communityStatus}, #{communityCreateUserId}, #{communityCreateTime},
+    #{communityLastModifiedUserId}, #{communityLastModifiedTime}, #{communityCategory},
+    #{communityImgBanner}, #{communityImgAvatar}, #{communityModifiedUserId},
+    #{communityModifiedTime}, #{communityDeleteUserId}, #{communityDeleteTime},
+    #{communityGroupId}, #{communityDdfId})
+  </insert>
+
+  <update id="update">
+    UPDATE dms_community.communities
+    SET community_name = #{communityName}, community_desc = #{communityDesc}, community_type = #{communityType},
+    community_status = #{communityStatus}, community_modified_user_id = #{communityModifiedUserId}, community_modified_time = #{communityModifiedTime},
+    community_category = #{communityCategory}
+    WHERE
+    community_id =
+    #{communityId}
+  </update>
+
+  <update id="delete">
+    UPDATE dms_community.communities
+    SET community_name = #{communityName}, community_status = #{communityStatus}, community_delete_user_id = #{communityDeleteUserId},
+    community_delete_time = #{communityDeleteTime}
+    WHERE
+    community_id =
+    #{communityId}
+  </update>
+
+  <insert id="addCommunityRole">
+    INSERT INTO dms_community.community_role
+    (group_id, community_id, role_id
+    <if test="isGeneratedFromApp == true">
+      , is_application_group
+    </if>
+    , main_group_id, main_group_name, is_from_group_list)
+    VALUES
+    (#{groupId}, #{communityId}, #{roleId}
+    <if test="isGeneratedFromApp == true">
+      , 1
+    </if>
+    , #{mainGroupId}, #{mainGroupName}, #{isFromGroupList} )
+    ON DUPLICATE KEY UPDATE
+    role_id = VALUES(role_id),
+    main_group_id = VALUES(main_group_id),
+    main_group_name = VALUES(main_group_name),
+    is_from_group_list = VALUES(is_from_group_list);
+  </insert>
+
+  <insert id="addMember">
+    INSERT INTO dms_community.member
+    (batch_id, type, user_id)
+    VALUES
+    <foreach collection="userIds" item="userId" index="index" open="(" separator="),(" close=")">
+      #{batchId}, #{type}, #{userId}
+    </foreach>
+    ON DUPLICATE KEY UPDATE batch_id=batch_id, type=type, user_id=user_id
+  </insert>
+
+  <insert id="addCommunitiesCreationInfo" keyProperty="batchId" useGeneratedKeys="true">
+    INSERT INTO
+    dms_community.communities_create_review
+    (community_name,
+    community_desc, community_category, applicant_id, application_time,
+    community_type, reviewer_id, review_time, status, rejected_message, community_language)
+    VALUES
+    (#{communityName}, #{communityDesc}, #{communityCategory},
+    #{applicantId}, #{applicationTime}, #{communityType}, '', 0, '', '', #{language})
+  </insert>
+
+  <update id="updateCommunitiesCreationInfo">
+    UPDATE dms_community.communities_create_review
+    SET reviewer_id = #{reviewerId}, review_time = #{reviewTime}, status = #{status}
+    WHERE
+    batch_id = #{batchId}
+  </update>
+
+  <update id="updateRejectedMessage">
+    UPDATE dms_community.communities_create_review
+    SET rejected_message = #{rejectedMessage}
+    WHERE
+    batch_id = #{batchId}
+  </update>
+
+  <select id="getCommunityByCategory" resultType="CommunityInfo">
+    SELECT
+    C.community_id, community_name, community_desc, community_category, community_img_avatar,
+    community_last_modified_user_id, community_last_modified_time, community_group_id
+    FROM
+    communities C
+    <if test="checkRole and userIdWithGid != null and userIdWithGid != ''">
+      INNER JOIN
+      (
+        SELECT community_role.community_id, MAX(community_role.role_id) AS role_id
+        FROM (SELECT * FROM dms_community.v_user_w_group WHERE FIND_IN_SET (user_id, #{userIdWithGid})) AS users
+        LEFT JOIN dms_community.community_role ON community_role.group_id = users.gid
+        GROUP BY community_role.community_id
+        HAVING role_id = #{roleId}
+      ) AS summary
+      ON C.community_id = summary.community_id
+    </if>
+    WHERE community_status NOT IN
+    <foreach collection="excludeStatusList" item="item" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+    <if test="category != 'all'">
+      AND community_category = #{category}
+    </if>
+    <!-- 假如是dl人員，就將白名單加入做filter，取得交集結果 -->
+    <if test="isDL==true">
+	  AND FIND_IN_SET (C.community_id , #{allowCommunityId})
+	</if>
+    ORDER BY ${sortField} ${sortOrder}, C.community_id ASC
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset}, #{limit}
+    </if>
+  </select>
+
+  <select id="countCommunityCategory" resultType="hashMap">
+    SELECT
+    community_category, COUNT(*) AS count
+    FROM communities C
+    <if test="checkRole and userIdWithGid != null and userIdWithGid != ''">
+      INNER JOIN
+      (
+      SELECT community_role.community_id, MAX(community_role.role_id) AS role_id
+      FROM (SELECT * FROM dms_community.v_user_w_group WHERE FIND_IN_SET (user_id, #{userIdWithGid})) AS users
+      LEFT JOIN dms_community.community_role ON community_role.group_id = users.gid
+      GROUP BY community_role.community_id
+      HAVING role_id = #{roleId}
+      ) AS summary
+      ON C.community_id = summary.community_id
+    </if>
+    WHERE community_status NOT IN
+    <foreach collection="excludeStatusList" item="item" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+    <!-- 假如是dl人員，就將白名單加入做filter，取得交集結果 -->
+    <if test="isDL==true">
+	  AND FIND_IN_SET (C.community_id , #{allowCommunityId})
+	</if>
+    GROUP BY community_category
+  </select>
+
+  <insert id="addRoleIntoCommunity">
+    INSERT INTO
+    dms_community.community_role
+    (group_id, community_id, role_id
+    <if test="isGeneratedFromApp == true">
+      ,is_application_group
+    </if>
+    )
+    VALUES
+    <foreach collection="groupId" item="item" index="index" open="(" separator="),(" close=")">
+      #{item}, #{communityId}, #{roleId}
+      <if test="isGeneratedFromApp == true">
+        ,1
+      </if>
+    </foreach>
+    ON DUPLICATE KEY UPDATE role_id=role_id
+  </insert>
+
+  <insert id="addUserIntoCommunityJoinReview">
+    INSERT INTO
+    dms_community.community_join_review
+    (community_id, application_id, application_desc, application_time,
+    reviewer_id, review_time, status)
+    VALUES (#{communityId}, #{applicationId}, #{applicationDesc}, #{applicationTime},
+    '', 0 , '')
+    ON DUPLICATE KEY UPDATE community_id=community_id, application_id=application_id,application_desc=#{applicationDesc},
+    application_time=#{applicationTime}, reviewer_id='', review_time=0, status=''
+  </insert>
+
+  <select id="checkUserRoleOfCommunity" resultType="java.lang.Integer">
+    SELECT count(*) as count
+    FROM dms_community.community_role as role
+      INNER JOIN dms_community.v_user_w_group as users on role.group_id = users.gid
+        AND FIND_IN_SET (users.user_id, #{userId})
+    WHERE role.community_id=#{communityId}
+      AND role.role_id=#{roleId}
+  </select>
+
+  <select id="getApplicantList" resultType="hashMap">
+    SELECT application_id, application_desc
+    FROM dms_community.community_join_review
+    WHERE community_id=#{communityId} AND status=''
+  </select>
+
+  <select id="checkApplicationExists" resultType="java.lang.Integer">
+    SELECT count(*) as count
+    FROM dms_community.community_join_review
+    WHERE application_id=#{applicantId} AND community_id=#{communityId} AND status=''
+  </select>
+
+  <update id="reviewTheMemberApplicationOfCommunity">
+    UPDATE dms_community.community_join_review
+    SET reviewer_id=#{reviewerId}, review_time=#{reviewTime}, status=#{status}
+    WHERE application_id=#{applicantId} AND community_id=#{communityId} AND status=''
+  </update>
+
+  <insert id="transferCommunityData">
+    Insert into dms_community.communities(
+    community_name, community_desc, community_type,
+    community_status, community_create_user_id, community_create_time,
+    community_last_modified_user_id, community_last_modified_time, community_category,
+    community_img_banner, community_img_avatar, community_modified_user_id,
+    community_modified_time, community_delete_user_id, community_delete_time,
+    community_group_id, community_ddf_id)
+    select
+    community_name, community_desc, community_type,
+    #{communityStatus}, applicant_id, application_time,
+    applicant_id, application_time, community_category,
+    '', '', '',
+    0, '', 0,
+    '', ''
+    from dms_community.communities_create_review where
+    batch_id = #{batchId}
+    <selectKey resultType="java.lang.Integer" order="AFTER" keyProperty="communityId">
+      select LAST_INSERT_ID()
+    </selectKey>
+  </insert>
+
+  <insert id="transferCommunityRole">
+    INSERT INTO dms_community.community_role(group_id, community_id, role_id, is_application_group)
+    SELECT CASE type WHEN
+          'admin' then #{adminGroupId} when
+          'member' then #{memberGroupId} end,
+        #{communityId},
+        CASE type WHEN
+          'admin' then 1 when
+          'member' then 2 end,
+        1
+    FROM dms_community.member WHERE batch_id = #{batchId}
+    ON DUPLICATE KEY UPDATE role_id=role_id
+  </insert>
+
+  <select id="getCommunityAppliedMember" resultType="UserInfo">
+    SELECT type, user_id
+    FROM dms_community.member
+    WHERE batch_id=#{batchId}
+  </select>
+
+  <select id="getCommunityRoleList" resultType="CommunityRoleInfo">
+    SELECT group_id, role_id, is_application_group
+    FROM dms_community.community_role
+    WHERE community_id=#{communityId}
+      AND group_id IS NOT NULL
+      AND group_id != ''
+    <if test="isApplicationGroup != null">
+      <choose>
+        <when test="isApplicationGroup == true">
+          and is_application_group = 1
+        </when>
+        <when test="isApplicationGroup == false">
+          and is_application_group = 0
+        </when>
+      </choose>
+    </if>
+    <if test="roleId >= 0">
+      and role_id = #{roleId}
+    </if>
+  </select>
+
+  <select id="getMainGroupCommunityRoleList" resultType="CommunityRoleInfo">
+    SELECT group_id, role_id, is_application_group
+    FROM dms_community.community_role
+    WHERE community_id = #{communityId}
+    AND group_id IS NOT NULL
+    AND group_id != ''
+    <if test="isApplicationGroup != null">
+      <choose>
+        <when test="isApplicationGroup == true">
+          AND is_application_group = 1
+        </when>
+        <when test="isApplicationGroup == false">
+          AND is_application_group = 0
+          AND is_from_group_list = 0
+        </when>
+      </choose>
+    </if>
+    <if test="isApplicationGroup == null">
+      AND (
+      is_application_group = 1
+      OR (is_application_group = 0 AND is_from_group_list = 0)
+      )
+    </if>
+    <if test="roleId >= 0">
+      AND role_id = #{roleId}
+    </if>
+  </select>
+
+  <select id="getMemberListWithSortAndLimit" resultType="CommunityMember">
+    <choose>
+      <when test="toGetCount == true">
+        SELECT COUNT(DISTINCT(users.user_id)) AS total_count
+      </when>
+      <when test="toGetCount == false">
+        SELECT users.user_id, min(community_role.role_id) as role_id,
+          users.account, users.cname, users.mail,
+          CASE WHEN MIN(is_application_group) = 1 THEN false ELSE true END AS dmsSync,
+          GROUP_CONCAT(community_role.main_group_name SEPARATOR ';') AS groupNameRawList
+      </when>
+    </choose>
+    FROM dms_community.v_user_w_group users
+    INNER JOIN
+    (SELECT * FROM dms_community.community_role WHERE community_id=#{communityId}) community_role
+    ON users.gid=community_role.group_id
+    where community_role.community_id =#{communityId}
+    <if test="userIdList != null and userIdList.size() > 0">
+      and users.user_id IN
+      <foreach item="item" index="index" collection="userIdList" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="name != '' and  name != null">
+      and upper(cname) LIKE CONCAT('%',upper(#{name}),'%')
+    </if>
+    <if test="toGetDmsMember != null and toGetDmsMember.booleanValue() == true">
+      and is_application_group = 0
+    </if>
+    <if test="toGetDmsMember != null and toGetDmsMember.booleanValue() == false">
+      and is_application_group = 1
+    </if>
+    <if test="roleId >= 0">
+      and role_id = #{roleId}
+    </if>
+    <if test="toGetCount == false">
+      GROUP BY users.user_id
+      ORDER BY
+      <choose>
+        <when test="sortField == 'role'">
+          +role_id, +users.cname
+        </when>
+        <otherwise>
+          +users.cname
+        </otherwise>
+      </choose>
+      <if test="limit >= 0 and offset >= 0">
+        LIMIT #{offset},#{limit}
+      </if>
+    </if>
+  </select>
+
+  <select id="findAllMembers" resultType="CommunityMember">
+    SELECT DISTINCT(u.user_id), min(r.role_id) as role_id, u.account, u.cname, u.mail
+    from community_role r join v_user_w_group u on u.gid = r.group_id
+    where r.community_id =#{communityId}
+    <if test="name != '' and  name != null">
+      and upper(cname) LIKE CONCAT('%',upper(#{name}),'%')
+    </if>
+    group by u.user_id
+  </select>
+
+  <select id="checkDuplicateCommunityName" resultType="Integer" parameterType="String">
+    SELECT COUNT(*) FROM
+    dms_community.communities
+    WHERE
+    <if test="originalName != ''">
+      community_name != #{originalName} AND 
+    </if>
+    community_name = #{communityName} AND community_status != 'delete'
+  </select>
+
+  <select id="checkDuplicateCommunityNameWithCommunities" resultType="Integer" parameterType="int">
+    SELECT COUNT(community_name) FROM dms_community.communities communities
+    WHERE communities.community_status != 'delete' AND
+    community_name = (SELECT community_name FROM dms_community.communities_create_review
+    WHERE batch_id=#{batchId})
+  </select>
+
+  <select id="getApplicantIdWithUncheck" resultType="String" parameterType="Integer">
+    SELECT application_id
+    FROM dms_community.community_join_review
+    WHERE community_id=#{communityId} AND status=''
+  </select>
+
+  <select id="getCommunityImgBannerById" resultType="CommunityInfo" parameterType="int">
+    SELECT
+    community_id, community_img_banner
+    FROM
+    dms_community.communities
+    WHERE
+    community_id = #{communityId}
+  </select>
+
+  <update id="updateCommunityImgBanner">
+    UPDATE dms_community.communities
+    SET community_img_banner = #{communityImgBanner}
+    WHERE
+    community_id = #{communityId}
+  </update>
+
+  <select id="getCommunityAvatarById" resultType="String">
+    SELECT community_img_avatar
+    FROM
+    dms_community.communities
+    WHERE
+    community_id = #{communityId}
+  </select>
+
+  <update id="updateCommunityImgAvatar">
+    UPDATE dms_community.communities
+    SET community_img_avatar = #{avatar}
+    WHERE
+    community_id = #{communityId}
+  </update>
+
+  <select id="getAllCommunityCreationList" resultType="com.delta.dms.community.swagger.model.CommunityReviewDetail">
+    SELECT batch_id, community_name, community_desc, applicant_id, application_time, reviewer_id, review_time, status, rejected_message
+    FROM dms_community.communities_create_review
+    WHERE status IN
+    <foreach item="item" index="index" collection="status" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+    ORDER BY application_time DESC
+    LIMIT #{offset},#{limit}
+  </select>
+
+  <select id="getCommunityCreationById" resultType="CommunitiesCreationInfo" parameterType="Integer">
+    SELECT review.batch_id, review.status, review.rejected_message,
+    review.applicant_id, review.community_name, review.community_desc,
+    review.application_time, users.cname, review.community_language
+    FROM dms_community.communities_create_review as review,
+    dms_community.v_user as users
+    where review.applicant_id = users.user_id and batch_id = #{batchId}
+  </select>
+
+  <select id="getAllMemberWithoutApplicantIdById" resultType="String" parameterType="Integer">
+    SELECT DISTINCT(users.user_id)
+    FROM dms_community.community_role as role
+      INNER JOIN dms_community.communities as community on role.community_id = community.community_id
+      INNER JOIN dms_community.v_user_w_group as users on role.group_id = users.gid
+    WHERE role.community_id=#{communityId}
+      AND users.user_id != community.community_create_user_id
+  </select>
+
+  <update id="updateLastModifiedOfCommunity">
+    UPDATE dms_community.communities
+    SET community_last_modified_user_id = #{memberId}, community_last_modified_time = #{milliseconds}
+    WHERE
+    community_id = #{communityId}
+  </update>
+
+  <select id="checkcheckDuplicateCommunityGroupId" resultType="Integer" parameterType="String">
+    SELECT COUNT(*) FROM
+    dms_community.communities
+    WHERE
+    community_group_id = #{communityGroupId}
+  </select>
+
+  <select id="getCommunityInfoByGroupId" resultType="CommunityInfo" parameterType="String">
+    SELECT
+    community_id, community_name, community_desc,
+    community_type, community_category, community_status,
+    community_create_user_id,
+    community_create_time, community_modified_user_id, community_modified_time,
+    community_delete_user_id, community_delete_time, community_last_modified_user_id,
+    community_last_modified_time, community_ddf_id, community_group_id
+    FROM
+    dms_community.communities
+    WHERE
+    community_group_id = #{communityGroupId} AND community_status != 'delete'
+  </select>
+
+  <delete id="deleteUserFromForumJoinReviewOfCommunity">
+    DELETE forum_join_review FROM dms_community.forum_join_review
+    INNER JOIN
+    (SELECT forum_id
+    FROM dms_community.forums
+    WHERE community_id=#{communityId}) forums
+    ON forums.forum_id = forum_join_review.forum_id
+    WHERE application_id IN
+    <foreach item="item" index="index" collection="userId" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+  </delete>
+
+  <insert id="addDeleteCommunityApplication">
+    INSERT INTO
+    dms_community.community_delete_review
+    (community_id, community_name, applicant_id, application_subject, application_desc, application_time,
+    reviewer_id, review_time, status)
+    VALUES (#{communityId}, #{communityName}, #{applicantId}, #{applicationSubject}, #{applicationDesc}, #{applicationTime},
+    '', 0 , '')
+  </insert>
+
+  <select id="getDeleteApplication" resultType="com.delta.dms.community.swagger.model.DeleteApplicationDetail">
+    SELECT *
+    FROM dms_community.community_delete_review
+    WHERE community_id=#{communityId} AND status = ''
+    LIMIT 1
+  </select>
+
+  <update id="reviewDeleteApplication">
+    UPDATE dms_community.community_delete_review
+    SET reviewer_id = #{userId}, review_time = #{time}, `status` = #{status}, rejected_message = #{rejectedMessage}
+    WHERE community_id = #{communityId} AND `status` = ''
+  </update>
+
+  <delete id="deleteAllMemberJoinApplicationOfCommunity">
+    DELETE FROM
+    dms_community.community_join_review
+    WHERE community_id=#{communityId};
+  </delete>
+
+  <select id="getDeleteApplicationList" resultType="com.delta.dms.community.swagger.model.DeleteApplicationDetail">
+    SELECT *
+    FROM dms_community.community_delete_review
+    WHERE status IN
+    <foreach item="item" index="index" collection="status" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+    ORDER BY application_time DESC
+    LIMIT #{offset},#{limit}
+  </select>
+
+  <select id="countDeleteApplicationList" resultType="Integer">
+    SELECT COUNT(*)
+    FROM dms_community.community_delete_review
+    WHERE status IN
+    <foreach item="item" index="index" collection="status" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+  </select>
+
+  <select id="getMemberUserAndGroupOfCommunity" resultType="String">
+    SELECT group_id
+    FROM dms_community.community_role
+    WHERE community_id=#{communityId} AND role_id=2 AND is_application_group=1
+  </select>
+
+  <select id="getAdminUserAndGroupOfCommunity" resultType="String">
+    SELECT group_id
+    FROM dms_community.community_role
+    WHERE community_id=#{communityId} AND role_id=1 AND is_application_group=1
+  </select>
+
+  <select id="countCommunityCreationApplicationList" resultType="Integer">
+    SELECT COUNT(*)
+    FROM dms_community.communities_create_review
+    WHERE status IN
+    <foreach item="item" index="index" collection="status" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+  </select>
+
+  <select id="getAllMemberWithoutGroupId" resultType="String">
+    SELECT DISTINCT(users.user_id)
+    FROM dms_community.community_role as role
+      INNER JOIN dms_community.v_user_w_group as users on role.group_id = users.gid
+    WHERE community_id=#{communityId} AND is_application_group=1;
+  </select>
+
+  <select id="getAdminGroupOfCommunity" resultType="String">
+    SELECT group_id
+    FROM dms_community.community_role
+    WHERE community_id=#{communityId} AND role_id=1;
+  </select>
+
+  <insert id="insertCommunityAnnouncementText">
+    INSERT INTO
+    dms_community.community_announcement
+    (`community_id`, `community_text`, `community_create_user_id`,`community_create_time`)
+    VALUES (#{communityId}, #{text}, #{userId}, #{time})
+    ON DUPLICATE KEY UPDATE community_modified_user_id = #{userId}, community_modified_time=#{time}, community_text=#{text}
+  </insert>
+
+  <delete id="deleteCommunityAnnouncementText">
+    DELETE FROM dms_community.community_announcement
+    WHERE community_id=#{communityId}
+  </delete>
+
+  <select id="getCommunityAnnouncement" resultType="String">
+    SELECT
+    community_text FROM dms_community.community_announcement AS announcement, dms_community.communities AS communities
+    WHERE announcement.community_id = #{communityId} AND
+    communities.community_id = announcement.community_id AND
+    communities.community_status != 'delete'
+  </select>
+
+  <select id="getCommunityOfActiveMembers" resultType="com.delta.dms.community.swagger.model.ActiveMemberInfo">
+    SELECT @SN:=@SN+1 as rank, reply.id, reply.count AS count FROM
+    (
+    SELECT reply_create_user_id as id, COUNT(*) AS count FROM dms_community.replies
+    WHERE reply_status = 'open' AND forum_id in (SELECT forum_id FROM dms_community.forums where community_id=#{communityId}) 
+    AND FROM_UNIXTIME(reply_create_time / 1000) BETWEEN ADDDATE(ADDDATE(DATE_SUB(CURDATE(),INTERVAL WEEKDAY(CURDATE()) + 1 DAY), #{start}),0) 
+    AND ADDDATE(DATE_SUB(CURDATE(),INTERVAL WEEKDAY(CURDATE()) + 1 DAY), #{end})
+    AND (follow_reply_id !=0 OR reply_index !=0) GROUP BY reply_create_user_id ORDER BY COUNT(*) DESC, reply_id ASC
+    <if test="limit > 0">
+      LIMIT #{limit}
+    </if>
+    ) AS reply, (SELECT @SN:=0) as Dummy
+  </select>
+
+  <select id="getLangByBatchId" resultType="String">
+    SELECT community_language
+    FROM `dms_community`.`communities_create_review`
+    WHERE batch_id=#{batchId}
+  </select>
+
+  <insert id="addCommunityNotificationType">
+    INSERT INTO `dms_community`.`communities_create_review_setting`
+    (`batch_id`, `notification_type`)
+    VALUES
+    (#{batchId}, #{notificationType})
+  </insert>
+
+  <insert id="transferCommunitySetting">
+    INSERT INTO `dms_community`.`communities_setting`
+    (`community_id`, `community_language`, `notification_type`)
+    select #{communityId}, review.community_language, setting.notification_type
+    FROM dms_community.communities_create_review review join dms_community.communities_create_review_setting setting on review.batch_id = setting.batch_id
+    where
+    review.batch_id=#{batchId};
+  </insert>
+
+  <update id="updateCommunitySeting">
+    UPDATE `dms_community`.`communities_setting`
+    SET `notification_type` = #{notificationType}
+    WHERE `community_id` = #{communityId}
+  </update>
+
+  <select id="getCommunityNotificationType" resultType="String">
+    SELECT notification_type
+    FROM `dms_community`.`communities_setting`
+    WHERE community_id=#{communityId};
+  </select>
+
+  <insert id="insertCommunityNotificationType">
+    INSERT INTO `dms_community`.`communities_setting`
+    (`community_id`, `community_language`, `notification_type`)
+    VALUES
+    (#{communityId}, #{communityLanguage}, #{notificationType})
+  </insert>
+
+  <select id="getPrivilegedAllCommunity" resultType="IdNameEntity">
+    SELECT distinct communities.community_id as id, communities.community_name as name
+    FROM
+    dms_community.communities communities INNER JOIN
+    (SELECT role.community_id , role.role_id, users.user_id
+      FROM dms_community.community_role as role
+        INNER JOIN dms_community.v_user_w_group as users on role.group_id = users.gid
+      WHERE FIND_IN_SET (users.user_id, #{userId}) AND role.role_id=1) AS community_role
+    ON communities.community_id=community_role.community_id
+    WHERE community_status = 'open'
+    ORDER BY communities.community_last_modified_time DESC
+  </select>
+
+  <select id="getCommunityIdByCommunityName" resultType="Integer"
+    parameterType="String">
+    SELECT community_id FROM
+    dms_community.communities
+    WHERE
+    community_name = #{communityName} AND community_status != 'delete'
+  </select>
+  
+  <select id="getCommunityIdByForumId" resultType="Integer"
+    parameterType="Integer">
+    SELECT community_id FROM
+    dms_community.forums
+    WHERE forum_id = #{forumId}
+  </select>
+  
+  <delete id="deleteGroupMemberInCommunity">
+    DELETE FROM dms_community.community_role
+    WHERE community_id=#{communityId} and is_application_group=0
+  </delete>
+
+  <select id="getUnintegratedUid" resultType="CommunityRoleInfo">
+    SELECT group_id, user_id, community_id, role_id, is_application_group
+    FROM dms_community_0302_0800.community_role
+    WHERE (group_id IS NULL or group_id = '' )
+      AND (user_id IS NOT NULL or user_id = '' )
+      AND is_application_group=0
+    LIMIT 100
+  </select>
+
+  <select id="getCommunityWithNoAppGroup" resultType="CommunityInfo">
+    SELECT communities.community_id, appGroupCount
+    FROM dms_community.communities
+      LEFT JOIN (SELECT community_id, COUNT(*) AS appGroupCount
+                FROM community_role
+                WHERE is_application_group=1 AND role_id = #{roleId}
+                GROUP BY community_id) AS roleSummary
+      ON communities.community_id = roleSummary.community_id
+    WHERE appGroupCount IS NULL
+    LIMIT 100
+  </select>
+
+  <update id="updateCommunityGroupId">
+    UPDATE dms_community_0302_0800.community_role
+    SET group_id = #{groupId}, is_application_group = 1
+    WHERE community_id = #{communityId}
+      AND user_id = #{userId}
+      AND role_id = #{roleId}
+  </update>
+
+  <select id="getCommunityWithOrgId" resultType="CommunityInfo">
+    SELECT communities.community_id, communities.community_group_id
+    FROM dms_community.communities
+    WHERE community_group_id != '' and community_group_id is not null
+      AND communities.community_status != 'delete'
+      AND community_last_orgId_sync_time &gt; #{startSyncTime}
+      AND community_last_orgId_sync_time &lt; #{endSyncTime}
+    ORDER BY community_last_orgId_sync_time
+    LIMIT 50
+  </select>
+
+  <select id="getUserGroupMissingInfo" resultType="CommunityRoleInfo">
+    SELECT *
+    FROM dms_community_0302_0800.community_role
+      LEFT JOIN (
+      SELECT bg.gid, gm.uid
+      FROM usergroup.group_member gm
+      INNER JOIN usergroup.base_group bg ON gm.`_gid` = bg.`_gid`) current
+      ON community_role.user_id = current.uid AND community_role.group_id = current.gid
+    WHERE  (community_id = #{communityId})
+    AND (is_application_group = 1)
+    AND community_role.user_id != ''
+    AND (current.gid IS NULL)
+  </select>
+
+  <update id="updateCommunityLastOrgIdSyncTime">
+    UPDATE dms_community.communities
+    SET community_last_orgId_sync_time = #{lastSyncTime}
+    WHERE community_id = #{communityId}
+  </update>
+
+  <select id="getLastSyncTimeByCommunityId" resultType="Long">
+    SELECT community_last_orgId_sync_time
+    FROM dms_community.communities
+    WHERE community_id = #{communityId}
+  </select>
+
+  <select id="getMinLastSyncTime" resultType="Long">
+    SELECT COALESCE(MIN(community_last_orgId_sync_time), 0)
+    FROM dms_community.communities
+    WHERE community_group_id != '' and community_group_id is not null
+      AND communities.community_status != 'delete'
+      AND community_last_orgId_sync_time &gt; #{startSyncTime}
+      AND community_last_orgId_sync_time &lt; #{endSyncTime}
+  </select>
+</mapper>

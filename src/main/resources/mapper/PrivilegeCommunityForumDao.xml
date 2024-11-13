@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper
+	namespace="com.delta.dms.community.dao.PrivilegedCommunityForumDao">
+
+	<select id="getPrivilegedCommunityForumIds"
+		resultType="com.delta.dms.community.swagger.model.PrivilegedCommunityForum">
+
+		SELECT DISTINCT cRoleFRoleUsers.user_id AS userId,
+		cRoleFRoleUsers.community_id AS communityId,
+		communities.community_name AS communityName,
+		cRoleFRoleUsers.forum_id AS forumId,
+		CONCAT(communities.community_name, ' – ', cRoleFRoleUsers.forum_name) AS forumName
+		FROM
+		(
+		SELECT cRoleForumsUsers.user_id, cRoleForumsUsers.community_id,
+		cRoleForumsUsers.c_role_id,
+		cRoleForumsUsers.forum_id, cRoleForumsUsers.forum_name, cRoleForumsUsers.forum_type,
+		cRoleForumsUsers.forum_status, forum_role.role_id f_role_id
+		FROM
+		(
+		SELECT cRoleUsers.user_id, cRoleUsers.community_id, cRoleUsers.role_id
+		c_role_id,
+		forum_id, forum_name, forum_type, forum_status
+		FROM
+		(
+		SELECT DISTINCT users.user_id, cr.community_id, cr.role_id
+		FROM dms_community.community_role as cr
+			INNER JOIN dms_community.v_user_w_group as users on cr.group_id = users.gid
+		WHERE users.user_id IN
+		<foreach collection="userId" item="item" index="index" open="(" separator="," close=")">
+		  #{item}
+    	</foreach>
+		) AS cRoleUsers
+		LEFT JOIN dms_community.forums on cRoleUsers.community_id =
+			dms_community.forums.community_id
+		) AS cRoleForumsUsers
+		LEFT JOIN forum_role on cRoleForumsUsers.forum_id = forum_role.forum_id
+		LEFT JOIN dms_community.v_user_w_group as fusers on forum_role.group_id = fusers.gid
+			AND cRoleForumsUsers.user_id = fusers.user_id
+		) AS cRoleFRoleUsers, dms_community.communities
+		WHERE NOT (cRoleFRoleUsers.forum_type = 'private' AND f_role_id IS NULL AND
+		c_role_id = 2)
+		AND cRoleFRoleUsers.community_id = dms_community.communities.community_id
+		AND cRoleFRoleUsers.forum_id IS NOT NULL
+		AND cRoleFRoleUsers.forum_status = 'open'
+		AND cRoleFRoleUsers.forum_type != 'system'
+		ORDER BY cRoleFRoleUsers.community_id, cRoleFRoleUsers.forum_id
+		<if test="limit != -1 and offset != -1">
+			LIMIT #{offset}, #{limit}
+		</if>
+
+	</select>
+
+</mapper>

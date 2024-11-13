@@ -1,0 +1,930 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.TopicDao">
+  <select id="getTopicById" resultType="TopicInfo" parameterType="int">
+    SELECT
+    T.topic_id, T.forum_id, T.topic_title, TT.topic_type,
+    T.topic_status, TCS.topic_conclusion_state AS topicState, T.topic_situation,
+    T.topic_create_user_id, T.topic_create_time,
+    T.topic_modified_user_id, T.topic_modified_time,
+    T.topic_delete_user_id, T.topic_delete_time, T.topic_view_count,
+    T.topic_last_modified_user_id, T.topic_last_modified_time,
+    TEXT.topic_text, T.topic_ddf_id, T.topic_topping_order,
+    IFNULL((TT.show_unconclude_state OR T.topic_conclusion_state_id != 1), 0) AS showState,
+    TT.archive_conclusion_attachment
+    FROM
+    topics AS T
+    LEFT JOIN topics_text TEXT ON T.topic_id = TEXT.topic_id
+    LEFT JOIN topic_type TT ON T.topic_type_id = TT.topic_type_id
+    LEFT JOIN topic_conclusion_state TCS ON T.topic_conclusion_state_id = TCS.topic_conclusion_state_id
+    WHERE
+    T.topic_id = #{topicId} AND T.topic_status != 'delete'
+  </select>
+
+  <select id="getAllByForumIdAndStatus" resultType="TopicInfo">
+    SELECT
+    topics.topic_id AS topic_id, topics.forum_id AS forum_id, topics.topic_title AS topic_title,
+    topics.topic_status AS topic_status, topics.topic_create_user_id AS topic_create_user_id, topics.topic_create_time AS topic_create_time,
+    topics.topic_modified_user_id AS topic_modified_user_id, topics.topic_modified_time AS topic_modified_time, topics.topic_delete_user_id AS topic_delete_user_id,
+    topics.topic_delete_time AS topic_delete_time, topics.topic_view_count AS topic_view_count,
+    topics.topic_last_modified_user_id AS topic_last_modified_user_id,
+    topics.topic_last_modified_time AS topic_last_modified_time, text.topic_text AS topic_text
+    FROM
+    topics AS topics, topics_text AS text
+    WHERE
+    topics.forum_id = #{forumId} AND topics.topic_id = text.topic_id AND topics.topic_status = #{topicStatus}
+  </select>
+
+  <insert id="addInfo" keyProperty="topicId" useGeneratedKeys="true">
+    INSERT INTO
+    topics
+    (forum_id, topic_title, topic_conclusion_state_id, topic_status, topic_situation, topic_type_id,
+    topic_create_user_id, topic_create_time, topic_last_modified_user_id,
+    topic_last_modified_time, topic_modified_user_id, topic_modified_time,
+    topic_delete_user_id, topic_delete_time, topic_view_count, topic_ddf_id
+    )
+    VALUES
+    (#{forumId}, #{topicTitle},
+    (SELECT topic_conclusion_state_id FROM topic_conclusion_state WHERE UPPER(topic_conclusion_state) = UPPER(#{topicState})),
+    #{topicStatus}, #{topicSituation},
+    (SELECT topic_type_id FROM topic_type WHERE UPPER(topic_type) = UPPER(#{topicType})),
+    #{topicCreateUserId}, #{topicCreateTime}, #{topicLastModifiedUserId},
+    #{topicLastModifiedTime}, #{topicModifiedUserId}, #{topicModifiedTime},
+    #{topicDeleteUserId}, #{topicDeleteTime}, #{topicViewCount}, #{topicDdfId}
+    )
+  </insert>
+
+  <insert id="addText" keyProperty="topicId" useGeneratedKeys="true">
+    INSERT INTO topics_text
+    (topic_id, topic_text)
+    VALUES
+    (#{topicId}, #{topicText})
+  </insert>
+
+  <update id="updateInfo">
+    UPDATE topics
+    SET topic_title = #{topicTitle},
+    topic_type_id = (SELECT topic_type_id FROM topic_type WHERE topic_type = #{topicType}),
+    topic_modified_user_id = #{topicModifiedUserId},
+    topic_modified_time = #{topicModifiedTime}
+    WHERE
+    topic_id = #{topicId}
+  </update>
+
+  <update id="updateText">
+    UPDATE topics_text
+    SET topic_text = #{topicText}
+    WHERE
+    topic_id = #{topicId}
+  </update>
+
+  <update id="delete">
+    UPDATE topics
+    SET topic_status = #{topicStatus}, topic_delete_user_id = #{topicDeleteUserId}, topic_delete_time = #{topicDeleteTime},
+    topic_last_modified_user_id = #{topicLastModifiedUserId}, topic_last_modified_time = #{topicLastModifiedTime}
+    WHERE
+    topic_id = #{topicId}
+  </update>
+
+  <select id="getTopicOfCommunityWithSortAndLimit" resultType="TopicInfo">
+    SELECT DISTINCT t.topic_id, pr.forum_id, t.topic_title, tt.topic_type, tcs.topic_conclusion_state AS topicState,
+    t.topic_status, t.topic_situation, t.topic_create_user_id,
+    t.topic_last_modified_user_id, t.topic_last_modified_time, t.topic_topping_order,
+    IFNULL((tt.show_unconclude_state OR t.topic_conclusion_state_id != 1), 0) AS showState
+    FROM
+    (
+    SELECT DISTINCT f.forum_id,
+    CASE
+      WHEN f.forum_type = "system" THEN 1
+      WHEN f.forum_type = "public" THEN 1
+      WHEN f.forum_type = "private" THEN
+    CASE
+      WHEN #{isSysAdmin} THEN 1
+      WHEN cr_role.role_id = 1 THEN 1
+      WHEN fr_role.role_id = 3 THEN 1
+      WHEN fr_role.role_id = 4 THEN 1
+    ELSE 0
+    END
+    ELSE 0
+    END as has_permission
+    FROM forums f
+      LEFT JOIN (
+        SELECT cr.community_id, cr.role_id, users.user_id
+        FROM dms_community.community_role cr
+          INNER JOIN dms_community.v_user_w_group as users on cr.group_id = users.gid
+        WHERE cr.community_id = #{communityId} AND FIND_IN_SET(users.user_id, #{userId})
+      ) AS cr_role ON f.community_id  = cr_role.community_id
+      LEFT JOIN (
+        SELECT forums.community_id, forums.forum_id, fr.role_id, fusers.user_id
+        FROM dms_community.forum_role fr
+          INNER JOIN dms_community.v_user_w_group as fusers on fr.group_id = fusers.gid
+          INNER JOIN dms_community.forums ON forums.forum_id = fr.forum_id
+        WHERE forums.community_id = #{communityId} AND FIND_IN_SET(fusers.user_id, #{userId})
+      ) AS fr_role ON f.forum_id  = fr_role.forum_id
+      INNER JOIN dms_community.communities c ON f.community_id = c.community_id
+    WHERE c.community_id = #{communityId} AND c.community_status != 'delete' AND f.forum_status != 'delete'
+    ) pr,
+    topics t
+    LEFT JOIN topic_type tt ON t.topic_type_id = tt.topic_type_id
+    LEFT JOIN topic_conclusion_state tcs ON t.topic_conclusion_state_id = tcs.topic_conclusion_state_id
+    WHERE pr.has_permission = 1 AND t.topic_status != 'delete' AND pr.forum_id = t.forum_id
+    <if test="topicState != null and topicState.size() > 0">
+      AND t.topic_conclusion_state_id IN
+      (SELECT topic_conclusion_state_id FROM topic_conclusion_state WHERE UPPER(topic_conclusion_state) IN
+      <foreach collection="topicState" item="item" open="(" separator="," close=")">
+        UPPER(#{item})
+      </foreach>
+      )
+    </if>
+    <!-- 假如是dl人員，就將白名單加入做filter，取得交集結果 -->
+    <if test="isDL==true">
+	  AND FIND_IN_SET (pr.forum_id , #{allowForumId})
+	</if>
+    <if test="topicType != null and topicType != ''">
+      AND t.topic_type_id = (SELECT topic_type_id FROM topic_type WHERE UPPER(topic_type) = UPPER(#{topicType}))
+    </if>
+    ORDER BY ${sortField} ${sortOrder}, t.topic_title ASC
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset},#{limit}
+    </if>
+  </select>
+
+  <select id="countTopicOfCommunity" resultType="java.lang.Integer">
+    SELECT COUNT(*)
+    FROM topics topics
+    INNER JOIN
+    (
+    	SELECT * 
+    	FROM forums 
+    	WHERE community_id=#{communityId} 
+    		  AND forum_status!='delete'
+    ) forums
+    ON topics.forum_id=forums.forum_id
+    WHERE topic_status != 'delete'
+  </select>
+
+  <select id="countUserCanReadTopicOfCommunity" resultType="java.lang.Integer">
+    SELECT COUNT(DISTINCT(t.topic_id))
+    FROM
+    (
+    SELECT DISTINCT f.forum_id,
+    CASE
+    WHEN f.forum_type = "system" THEN 1
+    WHEN f.forum_type = "public" THEN 1
+    WHEN f.forum_type = "private" THEN
+    CASE
+    WHEN #{isSysAdmin} THEN 1
+    WHEN cr_role.role_id = 1 THEN 1
+    WHEN fr_role.role_id = 3 THEN 1
+    WHEN fr_role.role_id = 4 THEN 1
+    ELSE 0
+    END
+    ELSE 0
+    END as has_permission
+    FROM forums f
+    LEFT JOIN (
+      SELECT cr.community_id, cr.role_id, users.user_id
+      FROM dms_community.community_role cr
+        INNER JOIN dms_community.v_user_w_group as users on cr.group_id = users.gid
+      WHERE cr.community_id = #{communityId} AND FIND_IN_SET(users.user_id, #{userId})
+    ) AS cr_role ON f.community_id  = cr_role.community_id
+    LEFT JOIN (
+      SELECT forums.community_id, forums.forum_id, fr.role_id, fusers.user_id
+      FROM dms_community.forum_role fr
+        INNER JOIN dms_community.v_user_w_group as fusers on fr.group_id = fusers.gid
+        INNER JOIN dms_community.forums ON forums.forum_id = fr.forum_id
+      WHERE forums.community_id = #{communityId} AND FIND_IN_SET(fusers.user_id, #{userId})
+    ) AS fr_role ON f.forum_id  = fr_role.forum_id
+    INNER JOIN communities c ON f.community_id = c.community_id
+    WHERE c.community_id = #{communityId} AND c.community_status != 'delete' AND f.forum_status != 'delete'
+    ) pr,
+    topics t
+    WHERE pr.has_permission = 1 AND t.topic_status != 'delete' AND pr.forum_id = t.forum_id
+    <!-- 假如是dl人員，就將白名單加入做filter，取得交集結果 -->
+    <if test="isDL==true">
+	  AND FIND_IN_SET (pr.forum_id , #{allowForumId})
+	</if>
+    <if test="topicState != null and topicState.size() > 0">
+      AND t.topic_conclusion_state_id IN
+      (SELECT topic_conclusion_state_id FROM topic_conclusion_state WHERE UPPER(topic_conclusion_state) IN
+      <foreach collection="topicState" item="item" open="(" separator="," close=")">
+        UPPER(#{item})
+      </foreach>
+      )
+    </if>
+    <if test="topicType != null and topicType != ''">
+      AND t.topic_type_id = (SELECT topic_type_id FROM topic_type WHERE UPPER(topic_type) = UPPER(#{topicType}))
+    </if>
+  </select>
+
+  <select id="getTopicOfForumWithSortAndLimit" resultType="TopicInfo">
+    SELECT
+    topics.topic_id, topics.forum_id, topics.topic_title, tt.topic_type, tcs.topic_conclusion_state AS topicState,
+    topics.topic_status, topics.topic_situation, topics.topic_create_user_id, topics.topic_last_modified_user_id, topics.topic_last_modified_time, topics.topic_create_time,
+    topics.topic_topping_order, IFNULL((tt.show_unconclude_state OR topics.topic_conclusion_state_id != 1), 0) AS showState
+    FROM
+    topics topics
+    LEFT JOIN topic_type tt ON topics.topic_type_id = tt.topic_type_id
+    LEFT JOIN topic_conclusion_state tcs ON topics.topic_conclusion_state_id = tcs.topic_conclusion_state_id
+    WHERE forum_id=#{forumId}
+    AND
+    topic_status!='delete'
+    <if test="topicState != null and topicState.size() > 0">
+      AND topics.topic_conclusion_state_id IN
+      (SELECT topic_conclusion_state_id FROM topic_conclusion_state WHERE UPPER(topic_conclusion_state) IN
+      <foreach collection="topicState" item="item" open="(" separator="," close=")">
+        UPPER(#{item})
+      </foreach>
+      )
+    </if>
+    <if test="topicType != null and topicType != ''">
+      AND topics.topic_type_id = (SELECT topic_type_id FROM topic_type WHERE UPPER(topic_type) = UPPER(#{topicType}))
+    </if>
+    ORDER BY ${sortField} ${sortOrder}, topics.topic_title ASC
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset},#{limit}
+    </if>
+  </select>
+
+  <select id="countTopicOfForum" resultType="java.lang.Integer">
+    SELECT COUNT(*)
+    FROM topics topics
+    WHERE forum_id=#{forumId} AND topic_status!='delete'
+    <if test="topicState != null and topicState.size() > 0">
+      AND topics.topic_conclusion_state_id IN
+      (SELECT topic_conclusion_state_id FROM topic_conclusion_state WHERE UPPER(topic_conclusion_state) IN
+      <foreach collection="topicState" item="item" open="(" separator="," close=")">
+        UPPER(#{item})
+      </foreach>
+      )
+    </if>
+    <if test="topicType != null and topicType != ''">
+      AND topics.topic_type_id = (SELECT topic_type_id FROM topic_type WHERE UPPER(topic_type) = UPPER(#{topicType}))
+    </if>
+  </select>
+
+  <select id="getTopicHomePage" resultMap="TopicInfoResultMap">
+    SELECT
+    topics.topic_id, topics.forum_id, forums.forum_name, forums.community_id, communities.community_name,
+    UPPER(communities.community_category) AS community_category, UPPER(communities.community_type) AS community_type,
+    topics.topic_title, UPPER(topics.topic_status) AS topic_status, UPPER(tcs.topic_conclusion_state) AS topic_state,
+    UPPER(topics.topic_situation) AS topic_situation, UPPER(tt.topic_type) AS topic_type,
+    topics.topic_create_user_id, users.cname AS topicCreateUserName, topics.topic_create_time,
+    topics.topic_view_count, topics_text.topic_text, replies.numberOfReply, topic_notification.notification_type,
+    topic_notification.recipient, topics.topic_modified_time, topics.topic_topping_order,
+    #{lang} AS lang
+    FROM
+    topics AS topics
+    INNER JOIN
+    v_user AS users
+    ON topics.topic_create_user_id=users.user_id
+    INNER JOIN
+    topics_text AS topics_text
+    ON topics.topic_id = topics_text.topic_id
+    INNER JOIN
+    forums AS forums
+    ON topics.forum_id=forums.forum_id
+    INNER JOIN
+    communities AS communities
+    ON forums.community_id=communities.community_id
+    LEFT JOIN
+    topic_notification AS topic_notification
+    ON topics.topic_id=topic_notification.topic_id
+    LEFT JOIN topic_type tt ON topics.topic_type_id = tt.topic_type_id
+    LEFT JOIN topic_conclusion_state tcs ON topics.topic_conclusion_state_id = tcs.topic_conclusion_state_id,
+    (SELECT COUNT(*) AS numberOfReply FROM replies WHERE follow_topic_id = #{topicId}) AS replies
+    WHERE
+    topics.topic_id = #{topicId} AND topic_status != 'delete'
+  </select>
+
+  <resultMap type="TopicInfo" id="TopicInfoResultMap">
+    <result property="topicId" column="topic_id" />
+    <result property="forumId" column="forum_id" />
+    <result property="forumName" column="forum_name" />
+    <result property="topicTitle" column="topic_title" />
+    <result property="topicType" column="topic_type" />
+    <result property="topicState" column="topic_state" />
+    <result property="topicStatus" column="topic_status" />
+    <result property="topicSituation" column="topic_situation" />
+    <result property="topicCreateUserId" column="topic_create_user_id" />
+    <result property="topicCreateTime" column="topic_create_time" />
+    <result property="topicModifiedUserId" column="topic_modified_user_id" />
+    <result property="topicModifiedTime" column="topic_modified_time" />
+    <result property="topicViewCount" column="topic_view_count" />
+    <result property="topicText" column="topic_text" />
+    <result property="communityId" column="community_id" />
+    <result property="communityName" column="community_name" />
+    <result property="communityCategory" column="community_category" />
+    <result property="communityType" column="community_type" />
+    <result property="topicState" column="topic_state" />
+    <result property="numberOfReply" column="numberOfReply" />
+    <result property="notificationType" column="notification_type" />
+    <result property="topicCreateUserName" column="topic_create_user_name" />
+    <result property="topicToppingOrder" column="topic_topping_order" />
+    <association property="forumSupportTopicType" column="{forumId=forum_id,communityId=community_id,lang=lang}"
+      select="com.delta.dms.community.dao.ForumDao.getForumSupportTopicType" />
+    <collection property="recipient" ofType="com.delta.dms.community.swagger.model.User" javaType="list">
+      <result property="id" column="recipient" />
+    </collection>
+  </resultMap>
+
+  <update id="addViewCountOfTopic">
+    UPDATE topics
+    SET topic_view_count = (topic_view_count + 1)
+    WHERE topic_id=#{topicId}
+  </update>
+
+  <insert id="addTagOfTopic">
+    INSERT INTO topic_tag
+    (topic_id, topic_tag)
+    VALUES
+    <foreach collection="tag" item="item" index="index" open="(" separator="),(" close=")">
+      #{topicId}, #{item}
+    </foreach>
+  </insert>
+
+  <delete id="deleteTagOfTopic">
+    DELETE FROM topic_tag
+    WHERE topic_id = #{topicId}
+  </delete>
+
+  <insert id="addAttachmentOfTopic">
+    INSERT INTO topic_attachment
+    (topic_id, attachment_id, file_name, file_ext, user_created_time)
+    VALUES (#{topicId}, #{attachmentId}, #{fileName}, #{fileExt}, #{createTime})
+  </insert>
+
+  <update id="deleteAttachmentOfTopic">
+    UPDATE topic_attachment
+    SET attachment_status = 'delete', delete_user_id = #{userId}, user_delete_time = #{deleteTime}
+    WHERE topic_id = #{topicId} and attachment_id = #{attachmentId}
+  </update>
+
+  <select id="getAttachmentIdOfTopic" resultType="String">
+    SELECT attachment_id
+    FROM topics
+    INNER JOIN topic_attachment
+    ON topics.topic_id=topic_attachment.topic_id
+    WHERE topics.topic_id=#{topicId} AND topic_status != 'delete' AND attachment_status != 'delete'
+  </select>
+
+  <select id="checkDuplicateTopicOfForum" resultType="java.lang.Integer">
+    SELECT COUNT(*)
+    FROM topics
+    WHERE 
+    <if test="originalTitle != ''">
+      topic_title != #{originalTitle} AND 
+    </if>
+    forum_id=#{forumId} AND topic_title=#{title} AND topic_status != 'delete'
+  </select>
+
+  <insert id="addNotificationOfTopic">
+    INSERT INTO
+    topic_notification
+    (topic_id, notification_type, recipient)
+    VALUES
+    (#{topicId}, #{notificationType}, #{recipient})
+    ON DUPLICATE KEY UPDATE topic_id=topic_id, notification_type=#{notificationType}, recipient=#{recipient}
+  </insert>
+
+  <update id="updateState">
+    UPDATE topics
+    SET topic_conclusion_state_id = 
+    (SELECT topic_conclusion_state_id FROM topic_conclusion_state WHERE UPPER(topic_conclusion_state) = UPPER(#{topicState}))
+    WHERE
+    topic_id = #{topicId}
+  </update>
+
+  <select id="getTagOfTopic" resultType="com.delta.dms.community.swagger.model.Tag">
+    SELECT DISTINCT topic_tag as label
+    FROM topic_tag
+    WHERE
+    topic_id=#{topicId}
+  </select>
+
+  <update id="updateLastModifiedOfTopic">
+    UPDATE topics
+    SET topic_last_modified_user_id = #{userId}, topic_last_modified_time = #{time}
+    WHERE
+    topic_id = #{topicId}
+  </update>
+
+  <select id="getLatestTopicOfAllCommunity" resultMap="latestTopic">
+    SELECT DISTINCT t.topic_id, pr.forum_id, pr.community_id, pr.community_img_avatar, t.topic_title, UPPER(tt.topic_type) AS topic_type,
+    UPPER(tcs.topic_conclusion_state) AS topic_state, UPPER(t.topic_situation) AS topic_situation, t.topic_last_modified_user_id, users.cname,
+    t.topic_last_modified_time, replies.reply_count
+    FROM
+    (
+    SELECT f.community_id, c.community_img_avatar, f.forum_id,
+      CASE
+      WHEN f.forum_type = "system" THEN
+      CASE
+      WHEN cr_role_id = 1 THEN 1
+      WHEN cr_role_id = 2 THEN 1
+      ELSE 0
+      END
+      WHEN f.forum_type = "public" THEN
+      CASE
+      WHEN cr_role_id = 1 THEN 1
+      WHEN cr_role_id = 2 THEN 1
+      ELSE 0
+      END
+      WHEN f.forum_type = "private" THEN
+      CASE
+      WHEN #{isSysAdmin} THEN 1
+      WHEN cr_role_id = 1 THEN 1
+      WHEN fr_role_id = 3 THEN 1
+      WHEN fr_role_id = 4 THEN 1
+      ELSE 0
+      END
+      ELSE 0
+      END as has_permission
+    FROM forums f
+      INNER JOIN
+        (SELECT MIN(cr.role_id) AS cr_role_id, cr.community_id, cu.user_id AS cu_user_id
+        FROM community_role cr
+        INNER JOIN (SELECT * FROM dms_community.v_user_w_group WHERE FIND_IN_SET(user_id,#{userId})) AS cu
+        ON cr.group_id = cu.gid
+        GROUP by cr.community_id, cu.user_id) AS cusers ON f.community_id = cusers.community_id
+      LEFT JOIN
+        (SELECT MIN(fr.role_id) AS fr_role_id, fr.forum_id, fu.user_id AS fu_user_id
+        FROM forum_role fr
+        INNER JOIN (SELECT * FROM dms_community.v_user_w_group WHERE FIND_IN_SET(user_id,#{userId})) AS fu
+        ON fr.group_id = fu.gid
+        GROUP by fr.forum_id, fu.user_id) AS fusers ON f.forum_id = fusers.forum_id
+      INNER JOIN communities c ON f.community_id = c.community_id
+    WHERE f.forum_status != 'delete' AND c.community_status != 'delete'
+    ) pr,
+    topics t
+    LEFT JOIN
+    (SELECT follow_topic_id, MAX(reply_index) AS reply_count FROM replies GROUP BY follow_topic_id) replies
+    ON replies.follow_topic_id=t.topic_id
+    INNER JOIN
+    v_user AS users
+    ON t.topic_last_modified_user_id=users.user_id
+    LEFT JOIN topic_type AS tt ON t.topic_type_id = tt.topic_type_id
+    LEFT JOIN topic_conclusion_state AS tcs ON t.topic_conclusion_state_id = tcs.topic_conclusion_state_id
+    WHERE pr.has_permission = 1 AND t.topic_status != 'delete' AND pr.forum_id = t.forum_id
+    <!-- 假如是dl人員，就將白名單加入做filter，取得交集結果 -->
+    <if test="isDL==true">
+	  AND FIND_IN_SET (pr.forum_id , #{allowForumId})
+	</if>
+    ORDER BY topic_last_modified_time DESC
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset},#{limit}
+    </if>
+  </select>
+
+  <resultMap type="com.delta.dms.community.swagger.model.LatestTopic" id="latestTopic">
+    <result property="topicId" column="topic_id" />
+    <result property="forumId" column="forum_id" />
+    <result property="communityId" column="community_id" />
+    <result property="communityAvatar" column="community_img_avatar" />
+    <result property="topicTitle" column="topic_title" />
+    <result property="topicType" column="topic_type" />
+    <result property="topicState" column="topic_state" />
+    <result property="topicSituation" column="topic_situation" />
+    <result property="lastModifiedTime" column="topic_last_modified_time" />
+    <result property="replyCount" column="reply_count" />
+    <association property="lastModifiedUser" javaType="com.delta.dms.community.swagger.model.User">
+      <result property="id" column="topic_last_modified_user_id" />
+      <result property="name" column="cname" />
+    </association>
+  </resultMap>
+
+  <update id="lockTopicAndItsReplies">
+    UPDATE topics
+    SET topics.topic_status = 'locked', topics.topic_modified_user_id=#{userId}, topics.topic_modified_time=#{modifiedTime}
+    WHERE topic_id = #{topicId};
+    UPDATE replies
+    SET replies.reply_status='locked', replies.reply_modified_user_id=#{userId}, replies.reply_modified_time=#{modifiedTime}
+    WHERE follow_topic_id = #{topicId} AND replies.reply_status != 'delete';
+  </update>
+
+  <update id="reopenTopicAndItsReplies">
+    UPDATE topics
+    SET topics.topic_status = 'open', topics.topic_modified_user_id=#{userId}, topics.topic_modified_time=#{modifiedTime}
+    WHERE topic_id = #{topicId} AND topic_status = #{status};
+    UPDATE replies
+    SET replies.reply_status='open', replies.reply_modified_user_id=#{userId}, replies.reply_modified_time=#{modifiedTime}
+    WHERE follow_topic_id = #{topicId} AND replies.reply_status = #{status};
+  </update>
+
+  <select id="getTopicOfUserWithSortAndLimit" resultType="com.delta.dms.community.swagger.model.TopicInformationOfBookmark">
+    SELECT
+    topics.topic_id, topics.forum_id, topics.topic_title, tt.topic_type, tcs.topic_conclusion_state AS topicState,
+    topics.topic_status, topics.topic_situation, topics.topic_create_user_id, topics.topic_last_modified_user_id, topics.topic_last_modified_time, topics_text.topic_text,
+    communities.community_id, communities.community_name
+    FROM
+    topics topics
+    INNER JOIN bookmark bookmark ON topics.topic_id = bookmark.object_pk AND object_id in (5,6)
+    INNER JOIN topics_text topics_text ON topics.topic_id=topics_text.topic_id
+    INNER JOIN forums forums ON forums.forum_id=topics.forum_id
+    INNER JOIN communities communities ON forums.community_id = communities.community_id
+    LEFT JOIN topic_type AS tt ON topics.topic_type_id = tt.topic_type_id
+    LEFT JOIN topic_conclusion_state AS tcs ON topics.topic_conclusion_state_id = tcs.topic_conclusion_state_id
+    WHERE topic_status != 'delete' AND user_id = #{userId}
+    ORDER BY ${sortField} ${sortOrder}, topics.topic_title ASC
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset},#{limit}
+    </if>
+  </select>
+
+  <select id="countTopicOfUser" resultType="java.lang.Integer">
+    SELECT COUNT(*)
+    FROM bookmark bookmark
+    INNER JOIN topics topics ON topics.topic_status != 'delete'
+    WHERE user_id=#{userId} AND object_id in (5,6) AND bookmark.object_pk = topics.topic_id;
+  </select>
+
+  <update id="setTopicSituation">
+    UPDATE topics
+    SET topic_situation=#{topicSituation}
+    WHERE topic_id=#{topicId}
+  </update>
+
+  <select id="getParticipatedTopicOfUser" resultType="com.delta.dms.community.swagger.model.ParticipatedTopic">
+    SELECT DISTINCT(object_pk) AS id, topics.topic_title AS title, topics_text.topic_text AS content, forums.forum_name AS forumName,
+    users.cname AS lastModifiedUser, topics.topic_last_modified_time AS lastModifiedTime, replies.reply_count AS replyCount
+    FROM activity_log
+    INNER JOIN topics ON object_pk=topic_id
+    INNER JOIN forums ON forums.forum_id=topics.forum_id
+    INNER JOIN topics_text ON topics.topic_id=topics_text.topic_id
+    INNER JOIN v_user as users ON topics.topic_last_modified_user_id=users.user_id
+    LEFT JOIN
+    (SELECT follow_topic_id, MAX(reply_index) AS reply_count FROM replies GROUP BY follow_topic_id) replies
+    ON replies.follow_topic_id=topics.topic_id
+    WHERE activity_log.operation_id IN (1, 2, 3) AND activity_log.object_id IN (5) AND activity_log.origin = 'community' AND topics.topic_status != 'delete'
+    AND activity_log.user_id=#{userId}
+    ORDER BY -activity_log.operation_time
+    <choose>
+      <when test="limit >= 0 and offset >= 0">
+        LIMIT #{offset},#{limit}
+      </when>
+      <otherwise>
+        LIMIT 0, 5
+      </otherwise>
+    </choose>
+  </select>
+
+  <select id="countToppingTopicOfForum" resultType="Integer">
+    SELECT count(*)
+    FROM topics where forum_id = #{forumId} AND
+    topic_status != 'delete' AND topic_topping_order != 0
+  </select>
+
+  <update id="toppingTopic">
+    UPDATE topics
+    SET topic_topping_order = (SELECT x.max_field FROM (SELECT (MAX(t.topic_topping_order) + 1) AS max_field FROM topics t WHERE topic_status != 'delete'
+    AND forum_id = (SELECT forum_id FROM topics WHERE topic_id = #{topicId})) x)
+    WHERE topic_id = #{topicId} AND topic_topping_order = 0 AND topic_status != 'delete'
+  </update>
+
+  <update id="unToppingTopic">
+    UPDATE topics SET topic_topping_order = topic_topping_order - 1 WHERE topic_topping_order > (SELECT x.topic_topping_order FROM (SELECT
+    topic_topping_order FROM topics WHERE topic_id = #{topicId}) x) AND forum_id = (SELECT y.forum_id FROM (SELECT forum_id FROM
+    topics WHERE topic_id = #{topicId}) y);
+    UPDATE topics SET topic_topping_order = 0 WHERE topic_id = #{topicId} AND topic_status != 'delete';
+  </update>
+
+  <update id="swapToppingOrderOfTopic">
+    UPDATE topics
+    SET topic_topping_order = (SELECT x.topic_topping_order FROM (SELECT topic_topping_order FROM topics WHERE topic_id = #{topicId}) x)
+    WHERE forum_id = (SELECT x.forum_id FROM (SELECT forum_id FROM topics WHERE topic_id = #{topicId}) x) AND topic_topping_order = #{toppingOrder}
+    AND topic_status != 'delete';
+    UPDATE topics
+    SET topic_topping_order = #{toppingOrder}
+    WHERE topic_id = #{topicId} AND topic_status != 'delete';
+  </update>
+
+  <select id="getHotPublicTopicOfCommunity" resultType="TopicInfo">
+    <!-- 這邊的CTE會跟getHotForumOfCommunity的長的一樣，定義一個CommonDao，共同的SQL fragment會從那裡引用   -->
+    <!-- CTE -->
+    <include refid="com.delta.dms.community.dao.CommonDao.topicWithScore"/>
+
+    <!--   因為CTE是串接的，所以後面要某些欄位，前面也要撈出那個欄位，就熱門公開主題來說最後挑選的時候在用topic id把主題其他需要的欄位撈出來就好(要join table的方式在最後撈資料) -->
+    SELECT
+      topics.topic_id, topics.forum_id, topics.topic_title, topics.topic_status, topics.topic_situation,
+      topics.topic_create_user_id, topics.topic_create_time, topics.topic_modified_user_id,
+      topics.topic_modified_time, topics.topic_delete_user_id, topics.topic_delete_time,
+      topics.topic_view_count, topics.topic_last_modified_user_id, topics.topic_last_modified_time,
+      topics.topic_ddf_id, topics.topic_topping_order,
+      tt.topic_type,
+      IFNULL((tt.show_unconclude_state OR topics.topic_conclusion_state_id != 1), 0) AS showState
+    FROM topics
+    INNER JOIN
+    topic_with_score
+    ON topics.topic_id = topic_with_score.topic_id
+    LEFT JOIN topic_type AS tt ON topics.topic_type_id = tt.topic_type_id
+    LEFT JOIN topic_conclusion_state AS tcs ON topics.topic_conclusion_state_id = tcs.topic_conclusion_state_id
+    ORDER BY topic_with_score.score DESC, topic_with_score.date DESC
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset},#{limit}
+    </if>
+  </select>
+
+  <select id="getToppingTopicByForumId" resultType="TopicInfo">
+    SELECT
+    topics.topic_id, topics.forum_id, topics.topic_title, tt.topic_type, tcs.topic_conclusion_state AS topicState,
+    topics.topic_status, topics.topic_situation, topics.topic_create_user_id, topics.topic_last_modified_user_id, topics.topic_last_modified_time,
+    topics.topic_topping_order, IFNULL((tt.show_unconclude_state OR topics.topic_conclusion_state_id != 1), 0) AS showState
+    FROM topics 
+    LEFT JOIN topic_type AS tt ON topics.topic_type_id = tt.topic_type_id
+    LEFT JOIN topic_conclusion_state AS tcs ON topics.topic_conclusion_state_id = tcs.topic_conclusion_state_id
+    WHERE forum_id = #{forumId} AND
+    topic_status != 'delete' AND topic_topping_order != 0
+    ORDER BY topic_topping_order DESC
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset},#{limit}
+    </if>
+  </select>
+
+  <update id="updateForumIdForTopicAndRepliesById">
+    UPDATE `dms_community`.`topics`
+    SET `forum_id` = #{newForumId}
+    WHERE `topic_id` = #{topicId} and `forum_id` = #{orignForumId};
+    UPDATE `dms_community`.`replies`
+    SET `forum_id` = #{newForumId}
+    WHERE `follow_topic_id` = #{topicId} AND `forum_id` = #{orignForumId}
+  </update>
+
+  <select id="getAllNeedConclusionAlertTopic" resultType="ConclusionAlertTopicInfo">
+    SELECT
+    T.topic_id, T.forum_id, T.topic_title, TCS.topic_conclusion_state AS topicState,
+    DATEDIFF(NOW(), FROM_UNIXTIME(T.topic_create_time / 1000)) AS duration,
+    F.forum_name, TTE.topic_type, TT.topic_text
+    FROM
+    topics T
+    LEFT JOIN forums F ON F.forum_id = T.forum_id
+    LEFT JOIN topic_conclusion_state AS TCS ON T.topic_conclusion_state_id = TCS.topic_conclusion_state_id
+    LEFT JOIN topic_type AS TTE ON T.topic_type_id = TTE.topic_type_id
+    LEFT JOIN topics_text AS TT ON T.topic_id = TT.topic_id
+    WHERE
+    T.forum_id IN
+    <foreach collection="forumId" item="item" index="index" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+    AND T.topic_type_id IN (SELECT topic_type_id FROM topic_type WHERE conclusion_alert = 1)
+    AND T.topic_conclusion_state_id != 2
+    AND T.topic_status != 'delete'
+    AND DATEDIFF(NOW(), FROM_UNIXTIME(T.topic_create_time / 1000))
+    <choose>
+      <when test="endDay >= startDay">
+        BETWEEN #{startDay} AND #{endDay}
+      </when>
+      <otherwise>
+        >= #{startDay}
+      </otherwise>
+    </choose>
+    ORDER BY duration
+  </select>
+  
+  <select id="getConclusionAlertByTopicType" resultType="boolean">
+    SELECT
+    conclusion_alert
+    FROM
+    topic_type
+    WHERE
+    UPPER(topic_type) = UPPER(#{topicType})
+  </select>
+  
+  <select id="getTopicTypeOfShowingUnconcludeState" resultType="com.delta.dms.community.swagger.model.TopicType">
+    SELECT topic_type FROM topic_type WHERE show_unconclude_state = 1 
+  </select>
+  
+  <select id="getTopicTypeByCommunityId" resultType="TopicTypeEntity">
+    SELECT
+    topic_type_id, topic_type,
+    <choose>
+      <when test="lang == 'enUs'">name_enUs</when>
+      <when test="lang == 'zhCn'">CASE name_zhCn WHEN '' THEN name_enUs ELSE name_zhCn END</when>
+      <otherwise>CASE name_zhTw WHEN '' THEN name_enUs ELSE name_zhTw END</otherwise>
+    </choose>
+    AS `name`, app_field_default_id
+    FROM topic_type
+    WHERE topic_type_id IN
+      (SELECT DISTINCT topic_type_id
+      FROM community_support_special_type CSST
+      JOIN community_special_type_mapping CSTM ON CSST.community_special_type_id = CSTM.community_special_type_id
+      WHERE community_id = #{communityId}
+      UNION SELECT topic_type_id FROM forums F
+      JOIN forum_support_topic_type FSTT ON F.forum_id = FSTT.forum_id WHERE F.community_id = #{communityId}
+      UNION SELECT topic_type_id FROM forum_support_topic_type WHERE forum_id = 0)
+    ORDER BY topic_type_order
+  </select>
+  
+  <select id="getTopicTypeByCommunityIdAndForumId" resultType="TopicTypeEntity">
+    SELECT
+    topic_type_id, topic_type,
+    <choose>
+      <when test="lang == 'enUs'">name_enUs</when>
+      <when test="lang == 'zhCn'">CASE name_zhCn WHEN '' THEN name_enUs ELSE name_zhCn END</when>
+      <otherwise>CASE name_zhTw WHEN '' THEN name_enUs ELSE name_zhTw END</otherwise>
+    </choose>
+    AS `name`, app_field_default_id
+    FROM topic_type
+    WHERE topic_type_id IN
+      (SELECT DISTINCT topic_type_id
+      FROM community_support_special_type CSST
+      JOIN community_special_type_mapping CSTM ON CSST.community_special_type_id = CSTM.community_special_type_id
+      WHERE community_id = #{communityId}
+      UNION SELECT topic_type_id FROM forum_support_topic_type WHERE forum_id = #{forumId} OR forum_id = 0)
+    ORDER BY topic_type_order
+  </select>
+  
+  <select id="getConclusionState" resultType="ConclusionStateEntity">
+    SELECT
+    DISTINCT TCS.topic_conclusion_state_id, TCS.topic_conclusion_state,
+    <choose>
+      <when test="lang == 'enUs'">TCS.name_enUs</when>
+      <when test="lang == 'zhCn'">CASE TCS.name_zhCn WHEN '' THEN TCS.name_enUs ELSE TCS.name_zhCn END</when>
+      <otherwise>CASE TCS.name_zhTw WHEN '' THEN TCS.name_enUs ELSE TCS.name_zhTw END</otherwise>
+    </choose>
+    AS `name`
+    FROM
+    topic_type_conclusion_mapping TTCM
+    JOIN topic_conclusion_state TCS ON TTCM.topic_conclusion_state_id = TCS.topic_conclusion_state_id
+    WHERE TTCM.topic_type_id IN
+    <foreach collection="topicTypeId" item="item" index="index" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+    ORDER BY TCS.topic_conclusion_state_order
+  </select>
+  
+  <select id="getConcludedTopicByTopicType" resultType="TopicInfo">
+    SELECT T.forum_id, F.forum_name,
+    T.topic_id, T.topic_title, T.topic_create_time, TT.topic_text,
+    RT.reply_conclusion_text AS conclusion, R.reply_modified_time AS conclusionModifiedTime,
+    F.community_id
+    FROM topics T
+    LEFT JOIN topics_text TT ON T.topic_id = TT.topic_id
+    LEFT JOIN forums F ON T.forum_id = F.forum_id
+    LEFT JOIN replies R ON T.topic_id = R.follow_topic_id AND R.follow_reply_id = 0 AND R.reply_index = 0
+    LEFT JOIN replies_text RT ON R.reply_id = RT.reply_id
+    WHERE T.topic_type_id IN
+    (SELECT topic_type_id FROM topic_type WHERE UPPER(topic_type) IN
+    <foreach collection="topicType" item="item" index="index" open="(" separator="," close=")">
+      UPPER(#{item})
+    </foreach>
+    )
+    AND R.reply_modified_time BETWEEN #{startTime} AND #{endTime}
+    AND T.topic_conclusion_state_id = 2
+    AND T.topic_status != 'delete'
+    ORDER BY T.topic_id
+  </select>
+
+	<insert id="upsertOrgMemberNotificationOfTopic">
+		INSERT INTO
+		`dms_community`.`topic_orgMember_notification`
+		(`topic_id`, `org_id`,
+		`users`)
+		VALUES
+		(#{topicId}, #{orgId}, #{users})
+		ON DUPLICATE KEY UPDATE
+		topic_id=topic_id, org_id=org_id, users=#{users}
+	</insert>
+
+	<insert id="upsertBgbuNotificationOfTopic">
+		INSERT INTO `dms_community`.`topic_bgbu_notification`
+		(`topic_id`, `org_id`, `users`)
+		VALUES
+		(#{topicId}, #{orgId}, #{users})
+		ON DUPLICATE KEY UPDATE topic_id=topic_id, org_id=org_id,
+		users=#{users}
+	</insert>
+
+	<select id="getOrgMemberNotificationOfTopic"
+		resultType="com.delta.dms.community.dao.entity.OrgIdWithUsers">
+		SELECT `org_id`, `users`
+		FROM
+		`dms_community`.`topic_orgMember_notification` where `topic_id` =
+		#{topicId}
+	</select>
+
+	<select id="getBgbuNotificationOfTopic"
+		resultType="com.delta.dms.community.dao.entity.OrgIdWithUsers">
+		SELECT `org_id`, `users`
+		FROM
+		`dms_community`.`topic_bgbu_notification` where `topic_id` =
+		#{topicId}
+	</select>
+
+	<delete id="deleteOrgMemberNotificationOfTopic">
+		DELETE FROM dms_community.topic_orgMember_notification
+		WHERE topic_id=#{topicId}
+	</delete>
+
+	<delete id="deleteBgbuNotificationOfTopic">
+		DELETE FROM dms_community.topic_bgbu_notification
+		WHERE topic_id=#{topicId}
+	</delete>
+	
+	<insert id="insertTopicAppField">
+    INSERT INTO topic_app_field
+    (topic_id, app_field_id)
+    VALUES
+    <foreach collection="appFieldIdList" item="item" index="index" open="(" separator="),(" close=")">
+      #{topicId}, #{item}
+    </foreach>
+    ON DUPLICATE KEY UPDATE topic_id=topic_id, app_field_id=app_field_id
+  </insert>
+  
+  <delete id="deleteTopicAppField">
+    DELETE FROM topic_app_field
+    WHERE topic_id = #{topicId}
+  </delete>
+  
+  <select id="getTopicAppField" resultType="IdNameEntity">
+    SELECT TAF.app_field_id AS `id`,
+    <choose>
+      <when test="lang == 'enUs'">I.en_US</when>
+      <when test="lang == 'zhCn'">CASE I.zh_CN WHEN '' THEN I.en_US ELSE I.zh_CN END</when>
+      <otherwise>CASE I.zh_TW WHEN '' THEN I.en_US ELSE I.zh_TW END</otherwise>
+    </choose>
+    AS `name`
+    FROM topic_app_field TAF
+    LEFT JOIN v_dropdown_i18n I ON TAF.app_field_id = I.dropdown_id
+    WHERE
+    TAF.topic_id = #{topicId}
+  </select>
+  
+  <insert id="insertTopicAttachmentAppField">
+    INSERT INTO topic_attachment_app_field
+    (attachment_id, app_field_id)
+    VALUES
+    <foreach collection="appFieldIdList" item="item" index="index" open="(" separator="),(" close=")">
+      #{attachmentId}, #{item}
+    </foreach>
+    ON DUPLICATE KEY UPDATE attachment_id=attachment_id, app_field_id=app_field_id
+  </insert>
+  
+  <delete id="deleteTopicAttachmentAppField">
+    DELETE FROM topic_attachment_app_field
+    WHERE attachment_id = #{attachmentId}
+  </delete>
+  
+  <select id="getTopicAttachmentAppField" resultType="IdNameEntity">
+    SELECT TAAF.app_field_id AS `id`,
+    <choose>
+      <when test="lang == 'enUs'">I.en_US</when>
+      <when test="lang == 'zhCn'">CASE I.zh_CN WHEN '' THEN I.en_US ELSE I.zh_CN END</when>
+      <otherwise>CASE I.zh_TW WHEN '' THEN I.en_US ELSE I.zh_TW END</otherwise>
+    </choose>
+    AS `name`
+    FROM topic_attachment_app_field TAAF
+    LEFT JOIN v_dropdown_i18n I ON TAAF.app_field_id = I.dropdown_id
+    WHERE
+    TAAF.attachment_id = #{attachmentId}
+  </select>
+  
+  <select id="getTopicAllAttachmentAppField" resultType="AttachmentAppFieldEntity">
+    SELECT TAAF.attachment_id, TAAF.app_field_id,
+    <choose>
+      <when test="lang == 'enUs'">I.en_US</when>
+      <when test="lang == 'zhCn'">CASE I.zh_CN WHEN '' THEN I.en_US ELSE I.zh_CN END</when>
+      <otherwise>CASE I.zh_TW WHEN '' THEN I.en_US ELSE I.zh_TW END</otherwise>
+    </choose>
+    AS app_field_name
+    FROM topic_attachment_app_field TAAF
+    LEFT JOIN v_dropdown_i18n I ON TAAF.app_field_id = I.dropdown_id
+    WHERE
+    <choose>
+	    <when test="null == attachmentIdList or attachmentIdList.isEmpty()">
+	     FALSE
+	    </when>
+	    <otherwise>
+	      TAAF.attachment_id IN
+		    <foreach collection="attachmentIdList" item="item" index="index" open="(" separator="," close=")">
+		      #{item}
+		    </foreach>
+	    </otherwise>
+    </choose>
+  </select>
+  
+  <select id="selectForumTypeByTopicId" resultType="String">
+    SELECT F.forum_type
+    FROM topics T
+    LEFT JOIN forums F ON T.forum_id = F.forum_id
+    WHERE T.topic_id = #{topicId} AND T.topic_status != 'delete'
+  </select>
+  
+  <select id="getTopicAttachments" resultType="AttachmentInfo">
+    SELECT A.attachment_id, A.file_name, A.file_ext, T.topic_title, T.topic_create_user_id AS create_user_id, U.cname AS create_user_name
+    FROM topic_attachment A
+    LEFT JOIN topics T ON A.topic_id = T.topic_id
+    LEFT JOIN v_user U ON T.topic_create_user_id = U.user_id
+    WHERE A.topic_id = #{topicId} AND A.attachment_status != 'delete'
+  </select>
+
+  <select id="getTopicsByForumIds" parameterType="list" resultType="CustomTopicInfoForExcel">
+    SELECT topic_id, topic_title
+    FROM topics
+    WHERE forum_id IN
+    <foreach item="forumId" collection="forumIds" open="(" separator="," close=")">
+      #{forumId}
+    </foreach>
+  </select>
+
+</mapper>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.PermissionDao">
+  <select id="checkUserPrivilege" resultType="Boolean">
+    SELECT COUNT(*) FROM
+    (SELECT role_id
+      FROM forum_role as fr
+        INNER JOIN dms_community.v_user_w_group as users on fr.group_id = users.gid
+      WHERE FIND_IN_SET(users.user_id, #{userId}) AND forum_id = #{forumId}
+    UNION
+    SELECT role_id
+      FROM community_role as cr
+        INNER JOIN dms_community.v_user_w_group as users on cr.group_id = users.gid
+      WHERE FIND_IN_SET(users.user_id, #{userId}) AND community_id = #{communityId}
+    UNION
+    SELECT 6 FROM v_user WHERE FIND_IN_SET(user_id, #{userId})) R
+    LEFT JOIN roles_permissions_objects_opeartions_view P ON R.role_id = P.role_id
+    WHERE P.object_name = #{object} AND P.operation_name = #{operation}
+  </select>
+</mapper>

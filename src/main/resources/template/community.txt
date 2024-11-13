@@ -1,0 +1,6 @@
+Community : [(${community.getCommunityName()})]
+Type : [(${community.getCommunityType()})]
+Category : [(${community.getCommunityCategory()})]
+Author : [(${author})]
+Create time : [(${#dates.format(new java.util.Date(community.getCommunityCreateTime()))})]
+Description : [(${community.getCommunityDesc()})]

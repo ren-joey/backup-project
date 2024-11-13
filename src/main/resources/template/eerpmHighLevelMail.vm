@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  </head>
+
+  <body>
+    <table style="font-family: 'Microsoft JhengHei'; font-size: 14px; width: 100%; background: #f8f8f8;" width="100%">
+      <tr>
+        <td style="text-align: center;">
+          <table cellpadding="0" cellspacing="0" style="font-family: 'Microsoft JhengHei'; font-size: 14px; width: 790px; margin: auto;">
+            <tr>
+              <td style="padding: 20px; text-align: center;">
+                <img alt="Delta DMS" src="cid:logo.png">
+              </td>
+            </tr>
+            <tr>
+              <td style="background: #0078dc; height: 2px;" height="2">
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 24px; background: white; color: #333333;">
+                <table cellpadding="0" cellspacing="0" width="100%" style="font-family: 'Microsoft JhengHei'; font-size: 14px;">
+                  <tbody>
+                    <tr>
+                      <td>
+                        <div style="text-align: center; font-weight: bold;">
+                          <div style="font-size: 20px; color: #0087dc;">
+                            EERP
+                            <span style="color: #d63333; font-size: 24px; margin: 0 4px;">高發問題</span>
+                            發布
+                          </div>
+                          <div style="color: #333333; font-size: 16px;">${context.getSubject()}</div>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding-top: 24px">
+                        <div style="color: #0087dc; font-size: 16px; margin-bottom: 8px;">
+                          ${context.getParam().get("title")}
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="border-top: 1px solid #0087dc; padding-bottom: 8px;"></td>
+                    </tr>
+                    <tr>
+                      <td style="border: 1px solid #d9d9d9; border-color: #ffe58f; background: #fffbe6;">
+                        <div style="margin: 8px 16px;">
+                          #set( $total = ${context.getParam().get("histories").size()} + 1 )
+                          <span style="font-weight: bold;">錯誤代碼 (${context.getParam().get("errorCode")}) 之主題迄今發生<span style="color: #d63333;">${total}起</span>，</span>已觸發EERP高發處理機制
+                          <div>請負責的小組成員、專家團隊共同參與討論，並取得DSM負責人的核可後，於 <span style="color: #d63333;">規範時間</span>內</div>
+                          <div style="font-weight: bold;">
+                            1. 完成主題結論<br>
+                            2. 附上改善對策相關佐證文件
+                          </div>
+                          <div><br>如<span style="color: #d63333;">規範時間</span>內未做結論，系統將會自動轉發至各廠長</div>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <div style="margin-top: 8px">以下表格為重覆高發問題列表 :</div>
+                        <div style="color: #333333; font-size: 16px; font-weight: bold; margin: 20px 0 8px;">錯誤代碼 (${context.getParam().get("errorCode")})</div>
+                        <table border="1" cellspacing="0" cellpadding="0" style="font-family: 'Microsoft JhengHei'; font-size: 14px; width: 100%; border-collapse: collapse; border: none;" width="100%">
+                          <tr style="font-weight: bold; background: #f9faff;">
+                            <td style="border-top: 1px solid #f0f0f0; border-bottom: 1px solid #f0f0f0; border-right: 0; border-left: 0; padding: 4px 8px;">事件日期</td>
+                            <td style="border-top: 1px solid #f0f0f0; border-bottom: 1px solid #f0f0f0; border-right: 0; border-left: 0; padding: 4px 8px; width: 50%;">快排原因</td>
+                            <td style="border-top: 1px solid #f0f0f0; border-bottom: 1px solid #f0f0f0; border-right: 0; border-left: 0; padding: 4px 8px; width: 50%;">改善對策</td>
+                          </tr>
+                          #foreach($history in $context.getParam().get("histories"))
+                          <tr>
+                            <td style="border-top: 1px solid #f0f0f0; border-bottom: 1px solid #f0f0f0; border-right: 0; border-left: 0; padding: 4px 8px; vertical-align: top;">$date.format('yyyy/MM/dd', $history.getCreateTime())</td>
+                            <td style="border-top: 1px solid #f0f0f0; border-bottom: 1px solid #f0f0f0; border-right: 0; border-left: 0; padding: 4px 8px; vertical-align: top;">
+                            #foreach($cause in $history.getCauses())
+                              <li>${cause}</li>
+                            #end
+                            </td>
+                            <td style="border-top: 1px solid #f0f0f0; border-bottom: 1px solid #f0f0f0; border-right: 0; border-left: 0; padding: 4px 8px; vertical-align: top;">
+                            #foreach($solution in $history.getSolutions())
+                              <li>${solution}</li>
+                            #end
+                            </td>
+                          </tr>
+                          #end
+                        </table>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 0 24px 12px; background: white;">
+                <table style="font-family: 'Microsoft JhengHei'; font-size: 14px;">
+                  <tr>
+                    <td style="width: 1000px; border: 1px solid white; background: #0087dc; padding: 12px 0; font-size: 16px; text-align: center;" width="1000" align="center"><a href="${context.getLink()}" target="_blank" style="color: white; text-decoration: none; font-weight: bold;">Read More on DMS</a></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 0 24px 12px; background: white;">
+                <div style="text-align: center; color: #333333; font-size: 13px;">${currentTime}</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="text-align: center; color: #333333; font-size: 13px; padding-top: 12px;" align="center">
+                This notification is sent from DMS
+              </td>
+            </tr>
+            <tr>
+              <td style="text-align: center; font-size: 13px; color: #8c8c8c; padding-bottom: 12px;" align="center">
+                這是從 DMS 傳送的通知
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+
+</html>

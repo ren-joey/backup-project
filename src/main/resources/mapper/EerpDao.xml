@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.EerpDao">
+
+  <sql id="filterEerpmTopic">
+    topic_create_time BETWEEN #{startTime} AND #{endTime}
+    <if test="communityId != 0">
+      AND community_id = #{communityId}
+    </if>
+    <if test="filterMap.containsKey('factory') and filterMap.get('factory').size() > 0">
+      AND factory IN
+      <foreach collection="filterMap.get('factory')" item="item" index="index" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="filterMap.containsKey('forum') and filterMap.get('forum').size() > 0">
+      AND forum_name IN
+      <foreach collection="filterMap.get('forum')" item="item" index="index" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="filterMap.containsKey('conclusion') and filterMap.get('conclusion').size() > 0">
+      AND conclusion_state_id IN
+      <foreach collection="filterMap.get('conclusion')" item="item" index="index" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="filterMap.containsKey('deviceModel') and filterMap.get('deviceModel').size() > 0">
+      AND device_model IN
+      <foreach collection="filterMap.get('deviceModel')" item="item" index="index" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="filterMap.containsKey('errorCode') and filterMap.get('errorCode').size() > 0">
+      AND error_code IN
+      <foreach collection="filterMap.get('errorCode')" item="item" index="index" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+  </sql>
+  
+  <sql id="filterEerppTopic">
+    topic_create_time BETWEEN #{startTime} AND #{endTime}
+    <if test="communityId != 0">
+      AND community_id = #{communityId}
+    </if>
+    <if test="filterMap.containsKey('factory') and filterMap.get('factory').size() > 0">
+      AND factory IN
+      <foreach collection="filterMap.get('factory')" item="item" index="index" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="filterMap.containsKey('department') and filterMap.get('department').size() > 0">
+      AND department IN
+      <foreach collection="filterMap.get('department')" item="item" index="index" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="filterMap.containsKey('forum') and filterMap.get('forum').size() > 0">
+      AND forum_name IN
+      <foreach collection="filterMap.get('forum')" item="item" index="index" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="filterMap.containsKey('area') and filterMap.get('area').size() > 0">
+      AND area IN
+      <foreach collection="filterMap.get('area')" item="item" index="index" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="filterMap.containsKey('lossCode') and filterMap.get('lossCode').size() > 0">
+      AND loss_code IN
+      <foreach collection="filterMap.get('lossCode')" item="item" index="index" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="filterMap.containsKey('conclusion') and filterMap.get('conclusion').size() > 0">
+      AND conclusion_state_id IN
+      <foreach collection="filterMap.get('conclusion')" item="item" index="index" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+  </sql>
+  
+  <sql id="filterCreateTime">
+    topic_create_time BETWEEN #{startTime} AND #{endTime} AND community_id = #{communityId}
+  </sql>
+	
+	<insert id="insertEerpReportLog">
+    INSERT INTO eerp_report_log
+    (process_start_time, process_end_time, eerp_type, report_status, message, report_start_timestamp, report_end_timestamp)
+    VALUES
+    (#{processStartTime}, #{processEndTime}, #{type.value}, #{status.value}, #{message}, #{reportStartTimestamp}, #{reportEndTimestamp})
+  </insert>
+  
+  <select id="getEerpReportLogRecipient" resultType="String">
+    SELECT address
+    FROM eerp_report_log_recipient
+  </select>
+  
+  <select id="getLastReportTime" resultType="Long">
+    SELECT IFNULL(MAX(report_end_timestamp), 0)
+    FROM eerp_report_log
+    WHERE report_status = 'success' AND eerp_type = #{type.value}
+  </select>
+  
+  <select id="getEerpmTopic" resultType="TopicEerpmEntity">
+    SELECT *
+    FROM v_topic_eerpm
+    WHERE <include refid="filterEerpmTopic"/>
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset}, #{limit}
+    </if>
+  </select>
+  
+  <select id="countEerpmTopic" resultType="Integer">
+    SELECT COUNT(*)
+    FROM v_topic_eerpm
+    WHERE <include refid="filterEerpmTopic"/>
+  </select>
+  
+  <select id="getAllConclusionState" resultType="IdNameEntity">
+    SELECT topic_conclusion_state_id AS id,
+    <choose>
+      <when test="lang == 'enUs'">name_enUs</when>
+      <when test="lang == 'zhCn'">name_zhCn</when>
+      <otherwise>name_zhTw</otherwise>
+    </choose>
+    AS name
+    FROM topic_conclusion_state
+  </select>
+  
+  <select id="getEerpmDistinctColumn" resultType="Object">
+    SELECT DISTINCT ${column}
+    FROM v_topic_eerpm
+    WHERE <include refid="filterCreateTime"/>
+  </select>
+  
+  <select id="getEerppTopic" resultType="TopicEerppEntity">
+    SELECT topic_id, topic_title, topic_create_time, forum_name, conclusion_state_id, conclusion_create_time, factory, department,
+    area, loss_code, duration, line,
+    <choose>
+      <when test="lang == 'en-us'">
+        loss_code_desc_en
+      </when>
+      <otherwise>
+        loss_code_desc_tw
+      </otherwise>
+    </choose> AS loss_code_desc
+    FROM v_topic_eerpp
+    WHERE <include refid="filterEerppTopic"/>
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset}, #{limit}
+    </if>
+  </select>
+  
+  <select id="countEerppTopic" resultType="Integer">
+    SELECT COUNT(*)
+    FROM v_topic_eerpp
+    WHERE <include refid="filterEerppTopic"/>
+  </select>
+  
+  <select id="getEerppDistinctColumn" resultType="Object">
+    SELECT DISTINCT ${column}
+    FROM v_topic_eerpp
+    WHERE <include refid="filterCreateTime"/>
+  </select>
+
+</mapper>

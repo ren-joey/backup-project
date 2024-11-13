@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.NotificationDao">
+  <select id="getNotificationOfUser" resultType="com.delta.dms.community.swagger.model.Notification">
+    SELECT notification.id, notification.user_id, UPPER(notification.`type`) AS `type`, UPPER(notification.`status`) AS `status`, notification.title,
+    notification.content, notification.`time`, notification.priority, notification.community_id, notification.community_name,
+    UPPER(notification.community_category) AS community_category, notification.forum_id, notification.forum_name,
+    UPPER(notification.forum_type) AS forum_type, notification.topic_id, notification.topic_title, UPPER(notification.topic_type) AS topic_type, notification.sender_id,
+    (CASE
+    WHEN notification.`type`= 'COMMUNITYCREATIONAPPLICATION' THEN communities_create_review.`status`
+    WHEN notification.`type`= 'COMMUNITYDELETIONAPPLICATION' THEN community_delete_review.`status`
+    WHEN notification.`type`= 'COMMUNITYJOINAPPLICATION' THEN community_join_review.`status`
+    WHEN notification.`type`= 'FORUMJOINAPPLICATION' THEN forum_join_review.`status`
+    ELSE ''
+    END) AS state
+    FROM dms_community.notification
+    LEFT JOIN dms_community.notification_review ON notification.id=notification_review.id
+    LEFT JOIN dms_community.communities_create_review ON notification_review.application_id=communities_create_review.batch_id
+    LEFT JOIN dms_community.community_delete_review ON notification_review.application_id=community_delete_review.id
+    LEFT JOIN dms_community.community_join_review ON notification_review.application_id=community_join_review.id
+    LEFT JOIN dms_community.forum_join_review ON notification_review.application_id=forum_join_review.id
+    WHERE user_id=#{userId}
+    ORDER BY time DESC
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset},#{limit}
+    </if>
+  </select>
+
+  <insert id="storeNotification" keyProperty="id" useGeneratedKeys="true">
+    INSERT INTO dms_community.notification(user_id, `type`, `status`, title, content, time, priority, community_id, community_name, community_category,
+    forum_id, forum_name, forum_type, topic_id, topic_title, topic_type, sender_id)
+    VALUES (#{userId}, #{type}, UPPER(#{status}), #{title}, #{content}, #{time}, #{priority}, #{communityId}, #{communityName}, #{communityCategory}, #{forumId},
+    #{forumName}, #{forumType}, #{topicId}, #{topicTitle}, #{topicType}, #{senderId});
+  </insert>
+
+  <insert id="storeUnreviewedNotification">
+    INSERT INTO dms_community.notification_review(id, application_id)
+    VALUES
+    <foreach collection="id" item="item" index="index" open="(" separator="),(" close=")">
+      #{item}, #{applicationId}
+    </foreach>
+  </insert>
+
+  <update id="readNotification">
+    UPDATE dms_community.notification
+    SET status = 'READ'
+    WHERE id=#{id}
+  </update>
+
+  <select id="getNotificationById" resultType="com.delta.dms.community.swagger.model.Notification">
+    SELECT notification.id, user_id, UPPER(`type`) AS `type`, UPPER(notification.`status`) AS `status`, title, content, time, priority, community_id,
+    community_name, UPPER(community_category) AS community_category, forum_id, forum_name,
+    UPPER(forum_type) AS forum_type, topic_id, topic_title, UPPER(topic_type) AS topic_type, sender_id
+    FROM dms_community.notification
+    WHERE notification.id=#{id}
+  </select>
+
+  <select id="getApplicationIdByTypeAndTime" resultType="Integer">
+    <choose>
+      <when test="type == 'communityCreationApplication'">
+        SELECT batch_id
+        FROM dms_community.communities_create_review
+        WHERE applicant_id=#{applicantId} AND application_time=#{applicationTime}
+      </when>
+      <when test="type == 'communityDeletionApplication'">
+        SELECT id
+        FROM dms_community.community_delete_review
+        WHERE applicant_id=#{applicantId} AND application_time=#{applicationTime}
+      </when>
+      <when test="type == 'communityJoinApplication'">
+        SELECT id
+        FROM dms_community.community_join_review
+        WHERE application_id=#{applicantId} AND application_time=#{applicationTime}
+      </when>
+      <when test="type == 'forumJoinApplication'">
+        SELECT id
+        FROM dms_community.forum_join_review
+        WHERE application_id=#{applicantId} AND application_time=#{applicationTime}
+      </when>
+    </choose>
+  </select>
+
+  <insert id="renewAccessTime">
+    INSERT INTO dms_community.notification_access_time(user_id, time)
+    VALUES (#{userId}, #{time})
+    ON DUPLICATE KEY UPDATE user_id=user_id, time=#{time};
+  </insert>
+
+  <select id="countNotification" resultType="Integer">
+    SELECT count(id)
+    FROM dms_community.notification
+    WHERE notification.`time` > (SELECT `time` FROM dms_community.notification_access_time WHERE user_id = #{userId}) AND user_id = #{userId}
+  </select>
+</mapper>

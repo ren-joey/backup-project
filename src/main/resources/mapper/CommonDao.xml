@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.CommonDao">
+    <!-- 使用此SQL fragment需要在使用的地方傳入，計算熱門討論區 -->
+    <sql id="topicWithScore">
+        <!-- CTE -->
+    WITH
+    topic_with_score_calculation_data AS
+    (SELECT joined_table.community_id, joined_table.forum_id, joined_table.forum_name, joined_table.topic_id, joined_table.topic_title, joined_table.like_count, joined_table.topic_view_count, joined_table.topic_last_modified_time, COALESCE(rc.reply_count, 0) AS reply_count FROM
+      (SELECT ct.community_id, ct.forum_id, ct.forum_name, ct.topic_id, ct.topic_title, ct.topic_view_count, ct.topic_last_modified_time, COALESCE(tec.like_count, 0) AS like_count FROM
+        (SELECT f.community_id, f.forum_id, f.forum_name, t.topic_title, t.topic_id, t.topic_view_count, t.topic_last_modified_time
+          FROM dms_community.forums f join dms_community.topics t WHERE
+          f.community_id  = #{communityId} AND f.forum_id  = t.forum_id AND f.forum_status != 'delete' AND t.topic_status != 'delete'
+          <!-- 假如是dl人員，就將白名單加入做filter，取得交集結果 -->
+          <if test="isDL==true">
+            AND FIND_IN_SET (forums.forum_id , #{allowForumId})
+          </if>
+        ) AS ct
+        left join (select count(*) as like_count, te.topic_id from dms_community.topic_emoji te WHERE te.emoji_id = 5 GROUP by te.topic_id) AS tec on tec.topic_id = ct.topic_id  order by like_count DESC) AS joined_table
+        left join (select count(*) as reply_count, r.follow_topic_id AS topic_id from dms_community.replies r WHERE r.reply_status = 'open' GROUP by r.follow_topic_id) AS rc on rc.topic_id = joined_table.topic_id),
+        <!-- unix timestamp in this DB, its time unit is "second" -->
+        topic_with_score AS
+            (SELECT m.community_id, m.forum_id, m.forum_name, m.topic_id, m.topic_title, m.topic_view_count, m.like_count, m.reply_count, FROM_UNIXTIME(m.topic_last_modified_time/1000) AS date,
+            (GREATEST(#{hotLastingSeconds}-(UNIX_TIMESTAMP(NOW()) - m.topic_last_modified_time/1000), 0)/#{hotLastingSeconds}) * 0.5 AS date_score ,
+            (like_count/GREATEST(max_like_count, 1))*0.3 + (topic_view_count/GREATEST(max_topic_view_count, 1))* 0.2 + (reply_count/GREATEST(max_reply_count, 1))*0.5 + (GREATEST(#{hotLastingSeconds}-(UNIX_TIMESTAMP(NOW()) - m.topic_last_modified_time/1000), 0)/#{hotLastingSeconds}) * 0.5 AS score
+        FROM topic_with_score_calculation_data AS m
+        JOIN (select max(like_count) AS max_like_count, max(topic_view_count) AS max_topic_view_count, max(reply_count) AS max_reply_count, topic_id from topic_with_score_calculation_data) AS mtws)
+        </sql>
+    </mapper>

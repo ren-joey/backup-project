@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:context="http://www.springframework.org/schema/context"
+  xsi:schemaLocation="http://www.springframework.org/schema/beans
+  http://www.springframework.org/schema/beans/spring-beans.xsd
+  http://www.springframework.org/schema/context
+  http://www.springframework.org/schema/context/spring-context.xsd">
+
+  <!-- <context:property-placeholder location="classpath:jdbc.properties" /> -->
+  <bean id="dataSource" class="com.zaxxer.hikari.HikariDataSource" destroy-method="shutdown">
+    <!-- <property name="driverClass" value="org.mariadb.jdbc.Driver" /> -->
+    <property name="jdbcUrl" value="jdbc:mariadb://localhost:9999/dms_community?useUnicode=true;characterEncoding=utf8" />
+    <property name="username" value="root" />
+    <!-- <property name="password" value="" /> -->
+
+    <property name="readOnly" value="false" />
+    <property name="connectionTimeout" value="30000" />
+    <property name="idleTimeout" value="600000" />
+    <property name="maxLifetime" value="1800000" />
+    <property name="maximumPoolSize" value="15" />
+  </bean>
+
+  <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+    <property name="dataSource" ref="dataSource" />
+    <property name="configLocation" value="classpath:mybatis-config.xml" />
+    <property name="typeAliasesPackage" value="com.delta.dms.community.dao.entity" />
+    <property name="mapperLocations" value="classpath:mapper/*.xml" />
+  </bean>
+
+  <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+    <property name="sqlSessionFactoryBeanName" value="sqlSessionFactory" />
+    <property name="basePackage" value="com.delta.dms.community.dao" />
+  </bean>
+</beans>

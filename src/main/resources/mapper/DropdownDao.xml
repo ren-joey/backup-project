@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.DropdownDao">
+
+  <select id="getAppFieldDropdownList" resultType="IdNameEntity">
+    SELECT
+    dropdown_id AS `id`,
+    <choose>
+      <when test="lang == 'enUs'">en_US</when>
+      <when test="lang == 'zhCn'">CASE zh_CN WHEN '' THEN en_US ELSE zh_CN END</when>
+      <otherwise>CASE zh_TW WHEN '' THEN en_US ELSE zh_TW END</otherwise>
+    </choose>
+    AS `name`
+    FROM
+    v_dropdown_i18n
+    ORDER BY priority
+  </select>
+
+</mapper>

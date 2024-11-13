@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.ActivityLogDao">
+  <insert id="insertActivityLogData" keyProperty="id" useGeneratedKeys="true">
+    INSERT INTO `dms_community`.`activity_log`
+    (`user_id`, `operation_id`,
+    `object_id`,
+    `object_pk`, `operation_time`, `origin`,
+    `content`,
+    `attachment_id`)
+    VALUES
+    (#{userId}, (SELECT operation_id FROM dms_community.operations where operation_name = #{operation}),
+    (SELECT object_id FROM dms_community.objects where object_name=#{object}),
+    #{objectPk}, #{operationTime}, #{origin},
+    #{content}, #{attachmentId})
+  </insert>
+</mapper>

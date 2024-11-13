@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.MailDao">
+  <insert id="insertMail">
+    INSERT INTO dms_notification.email(creator, sender, recipient, subject, content, `status`, `priority`, `origin`)
+    VALUES
+    (#{creator}, #{sender}, #{recipient}, #{subject}, #{content, jdbcType=VARCHAR}, 'wait', #{priority}, 'community')
+  </insert>
+</mapper>

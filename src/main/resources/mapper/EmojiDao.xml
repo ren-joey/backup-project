@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.EmojiDao">
+
+  <select id="getEmojiOfTopic" resultType="hashMap">
+    SELECT emoji.`desc`, COUNT(*) AS `count`
+    FROM dms_community.topic_emoji
+    INNER JOIN
+    dms_community.emoji
+    ON topic_emoji.emoji_id=emoji.id
+    WHERE topic_id=#{topicId}
+    GROUP BY emoji_id
+  </select>
+
+  <select id="getEmojiOfTopicByUser" resultType="String">
+    SELECT emoji.`desc`
+    FROM dms_community.topic_emoji
+    INNER JOIN
+    dms_community.emoji
+    ON topic_emoji.emoji_id=emoji.id
+    WHERE topic_id=#{topicId} AND user_id=#{userId}
+  </select>
+
+  <select id="getEmojiOfReply" resultType="hashMap">
+    SELECT emoji.`desc`, COUNT(*) AS `count`
+    FROM dms_community.reply_emoji
+    INNER JOIN
+    dms_community.emoji
+    ON reply_emoji.emoji_id=emoji.id
+    WHERE reply_id=#{replyId}
+    GROUP BY emoji_id
+  </select>
+
+  <select id="getEmojiOfReplyByUser" resultType="String">
+    SELECT emoji.`desc`
+    FROM dms_community.reply_emoji
+    INNER JOIN
+    dms_community.emoji
+    ON reply_emoji.emoji_id=emoji.id
+    WHERE reply_id=#{replyId} AND user_id=#{userId}
+  </select>
+
+  <insert id="setEmojiOfTopic">
+    INSERT INTO
+    dms_community.topic_emoji
+    (user_id, topic_id, emoji_id, operation_time)
+    VALUES
+    (#{userId}, #{topicId}, #{emojiId}, #{operationTime})
+    ON DUPLICATE KEY UPDATE user_id=user_id, topic_id=topic_id, emoji_id=#{emojiId}
+  </insert>
+
+  <select id="getEmojiDetailOfTopic" resultType="com.delta.dms.community.swagger.model.EmojiDetail">
+    SELECT A.user_id, A.operation_time
+    FROM topic_emoji A JOIN v_user B ON A.user_id = B.user_id
+    WHERE A.topic_id = #{topicId} AND A.emoji_id = #{emojiId}
+    ORDER BY A.operation_time ${sortOrder}, B.`account`
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset},#{limit}
+    </if>
+  </select>
+
+  <select id="getEmojiDetailOfReply" resultType="com.delta.dms.community.swagger.model.EmojiDetail">
+    SELECT A.user_id, A.operation_time
+    FROM reply_emoji A JOIN v_user B ON A.user_id = B.user_id
+    WHERE A.reply_id = #{replyId} AND A.emoji_id = #{emojiId}
+    ORDER BY A.operation_time ${sortOrder}, B.`account`
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset},#{limit}
+    </if>
+  </select>
+
+  <delete id="removeEmojiOfTopic">
+    DELETE FROM dms_community.topic_emoji
+    WHERE user_id=#{userId} AND topic_id=#{topicId}
+  </delete>
+
+  <insert id="setEmojiOfReply">
+    INSERT INTO
+    dms_community.reply_emoji
+    (user_id, reply_id, emoji_id, operation_time)
+    VALUES
+    (#{userId}, #{replyId}, #{emojiId}, #{operationTime})
+    ON DUPLICATE KEY UPDATE user_id=user_id, reply_id=reply_id, emoji_id=#{emojiId}
+  </insert>
+
+  <delete id="removeEmojiOfReply">
+    DELETE FROM dms_community.reply_emoji
+    WHERE user_id=#{userId} AND reply_id=#{replyId}
+  </delete>
+</mapper>

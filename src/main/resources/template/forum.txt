@@ -1,0 +1,7 @@
+Community : [(${forum.getCommunityName()})]
+Forum : [(${forum.getForumName()})]
+Type : [(${forum.getForumType()})]
+Author : [(${author})]
+Create time : [(${#dates.format(new java.util.Date(forum.getForumCreateTime()))})]
+Tag : [(${tag})]
+Description : [(${forum.getForumDesc()})]

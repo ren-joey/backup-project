@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.ReplyDao">
+  <select id="getReplyById" resultType="ReplyInfo" parameterType="int">
+    SELECT
+    replies.reply_id, replies.forum_id, replies.follow_topic_id, replies.follow_reply_id, replies.reply_status, replies.reply_create_user_id,
+    replies.reply_create_time, replies.reply_modified_user_id, replies.reply_modified_time, replies.reply_delete_user_id, replies.reply_delete_time,
+    replies.reply_index, replies.reply_respondee, replies_text.reply_text, replies_text.reply_conclusion_text,
+    vm.user_frame AS medal_frame, vm.title AS medal_title, vm.medal_id, F.forum_name
+    FROM
+    dms_community.replies AS replies
+    INNER JOIN dms_community.replies_text AS replies_text
+    ON replies.reply_id = replies_text.reply_id
+    LEFT JOIN dms_medal.v_medal vm ON replies.reply_create_user_id = vm.id AND vm.selected = 1
+    LEFT JOIN forums F ON replies.forum_id = F.forum_id
+    WHERE
+    replies.reply_id = #{replyId} AND replies.reply_id = replies_text.reply_id AND reply_status != 'delete'
+  </select>
+
+  <insert id="addInfo" keyProperty="replyId" useGeneratedKeys="true">
+    INSERT INTO dms_community.replies
+    (forum_id, follow_topic_id, reply_status,
+    reply_create_user_id, reply_create_time, follow_reply_id,
+    reply_modified_user_id, reply_modified_time, reply_delete_user_id,
+    reply_delete_time, reply_index, reply_respondee)
+    VALUES
+    (#{forumId}, #{followTopicId}, #{replyStatus},
+    #{replyCreateUserId}, #{replyCreateTime}, #{followReplyId},
+    #{replyModifiedUserId}, #{replyModifiedTime}, #{replyDeleteUserId},
+    #{replyDeleteTime},
+    <choose>
+      <when test="followReplyId == 0 and replyIndex != 0">
+        (SELECT COALESCE(MAX( r.reply_index ), 0) FROM dms_community.replies r WHERE follow_topic_id=#{followTopicId}) + 1
+      </when>
+      <otherwise>
+        0
+      </otherwise>
+    </choose>
+    , #{replyRespondee})
+  </insert>
+
+  <insert id="addText" keyProperty="replyId" useGeneratedKeys="true">
+    INSERT INTO dms_community.replies_text
+    (reply_id, reply_text, reply_conclusion_text)
+    VALUES
+    (#{replyId}, #{replyText}, #{replyConclusionText})
+  </insert>
+
+  <update id="updateInfo">
+    UPDATE dms_community.replies
+    SET reply_modified_user_id = #{replyModifiedUserId}, reply_modified_time = #{replyModifiedTime}, replies.reply_respondee = #{replyRespondee}
+    WHERE
+    reply_id = #{replyId}
+  </update>
+
+  <update id="updateText">
+    UPDATE dms_community.replies_text
+    SET reply_text = #{replyText}, reply_conclusion_text = #{replyConclusionText}
+    WHERE
+    reply_id = #{replyId}
+  </update>
+
+  <select id="getReplyListOfTopic" resultType="ReplyInfo">
+    SELECT
+    replies.reply_id, replies.forum_id, replies.reply_status, replies.reply_create_user_id,
+    replies.reply_create_time, replies.reply_index, replies_text.reply_text, replies_text.reply_conclusion_text,
+    replies.reply_delete_user_id, replies.reply_delete_time, replies.reply_modified_time, replies.follow_reply_id, 
+    vm.user_frame AS medal_frame, vm.title AS medal_title, vm.medal_id
+    FROM
+    dms_community.replies AS replies
+    INNER JOIN dms_community.replies_text AS replies_text
+    ON replies.reply_id = replies_text.reply_id
+    LEFT JOIN dms_medal.v_medal vm ON replies.reply_create_user_id  = vm.id AND vm.selected = 1
+    WHERE
+    replies.follow_topic_id=#{topicId} AND replies.follow_reply_id=0
+    ORDER BY
+    CASE WHEN replies.reply_index = 0 THEN 0
+    ELSE 1
+    END ASC, replies.reply_create_time ${sortOrder}
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset},#{limit}
+    </if>
+  </select>
+
+  <insert id="addAttachmentOfReply">
+    INSERT INTO dms_community.reply_attachment
+    (reply_id, attachment_id, file_name, file_ext, user_created_time)
+    VALUES (#{replyId}, #{attachmentId}, #{fileName}, #{fileExt}, #{createTime})
+  </insert>
+
+  <select id="getReplyIndexById" resultType="Integer" parameterType="Integer">
+    SELECT IFNULL(MAX(reply_index), 0) + 1 AS reply_index
+    FROM dms_community.replies
+    where forum_id=#{forumId} and follow_topic_id=#{followTopicId};
+  </select>
+
+  <select id="countReplyOfTopic" resultType="java.lang.Integer">
+    SELECT COUNT(*)
+    FROM dms_community.replies
+    WHERE follow_topic_id=#{topicId} AND replies.follow_reply_id=0
+  </select>
+
+  <select id="getAttachmentIdOfReply" resultType="String">
+    SELECT attachment_id
+    FROM dms_community.replies
+    INNER JOIN dms_community.reply_attachment
+    ON replies.reply_id=reply_attachment.reply_id
+    WHERE replies.reply_id=#{replyId} AND reply_status != 'delete' and attachment_status != 'delete'
+  </select>
+
+  <insert id="addNotificationOfReply">
+    INSERT INTO
+    dms_community.reply_notification
+    (reply_id, notification_type, recipient)
+    VALUES
+    (#{replyId}, #{notificationType}, #{recipient})
+    ON DUPLICATE KEY UPDATE reply_id=reply_id, notification_type=#{notificationType}, recipient=#{recipient}
+  </insert>
+
+  <select id="getNotificationOfReply" resultType="hashMap">
+    SELECT notification_type AS `type`, recipient
+    FROM dms_community.reply_notification
+    WHERE reply_id=#{replyId}
+  </select>
+
+  <update id="deleteAttachmentOfReply">
+    UPDATE dms_community.reply_attachment
+    SET attachment_status = 'delete', delete_user_id = #{userId}, user_delete_time = #{deleteTime}
+    WHERE reply_id = #{replyId} AND attachment_id = #{attachmentId}
+  </update>
+
+  <update id="deleteReply">
+    UPDATE dms_community.replies
+    SET replies.reply_status='delete', replies.reply_delete_user_id=#{userId}, replies.reply_delete_time=#{deleteTime}
+    WHERE reply_id = #{replyId}
+  </update>
+
+  <select id="getReplyListOfReply" resultType="ReplyInfo">
+    SELECT
+    replies.reply_id, replies.forum_id, replies.reply_status, replies.reply_create_user_id,
+    replies.reply_create_time, replies.reply_index, replies_text.reply_text, replies_text.reply_conclusion_text,
+    replies.reply_delete_user_id, replies.reply_delete_time, replies.reply_modified_time, replies.follow_reply_id,
+    replies.reply_respondee, vm.user_frame AS medal_frame, vm.title AS medal_title, vm.medal_id
+    FROM
+    dms_community.replies AS replies
+    INNER JOIN dms_community.replies_text AS replies_text
+    ON replies.reply_id = replies_text.reply_id
+    LEFT JOIN dms_medal.v_medal vm ON replies.reply_create_user_id = vm.id AND vm.selected = 1
+    WHERE
+    replies.follow_reply_id=#{replyId}
+    ORDER BY
+    CASE WHEN replies.reply_index = 0 THEN 0
+    ELSE 1
+    END ASC, replies.reply_create_time ${sortOrder}
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset},#{limit}
+    </if>
+  </select>
+
+  <select id="countReplyOfReply" resultType="java.lang.Integer">
+    SELECT COUNT(*)
+    FROM dms_community.replies
+    WHERE follow_reply_id=#{replyId}
+  </select>
+
+  <select id="countKidNumOfReply" resultType="java.lang.Integer">
+    SELECT COUNT(*)
+    FROM dms_community.replies
+    WHERE follow_reply_id=#{replyId};
+  </select>
+  
+  <select id="getReplyList" resultType="com.delta.dms.community.swagger.model.ReplyDetail">
+    SELECT replies.reply_id, replies.reply_create_user_id, replies.reply_create_time, replies.follow_reply_id, replies.reply_index, replies.reply_modified_user_id, replies_text.reply_text, replies_text.reply_conclusion_text
+    FROM dms_community.replies
+    INNER JOIN dms_community.replies_text ON replies.reply_id = replies_text.reply_id
+    WHERE replies.follow_topic_id = #{topicId} AND replies.follow_reply_id = 0 AND replies.reply_status != 'delete'
+    ORDER BY CASE WHEN replies.reply_index = 0 THEN 0 ELSE 1 END ASC
+  </select>
+    
+  <select id="getNestedReplyList" resultType="com.delta.dms.community.swagger.model.ReplyDetail">
+    SELECT replies.reply_id, replies.reply_create_user_id, replies.reply_create_time, replies.follow_reply_id, replies.reply_index, replies_text.reply_text
+    FROM dms_community.replies
+    INNER JOIN dms_community.replies_text ON replies.reply_id = replies_text.reply_id
+    WHERE replies.follow_reply_id = #{replyId} AND replies.reply_status != 'delete'
+    ORDER BY reply_create_time ASC
+  </select>
+
+	<insert id="upsertOrgMemberNotificationOfReply">
+		INSERT INTO `dms_community`.`reply_orgMember_notification`
+		(`reply_id`, `org_id`, `users`)
+		VALUES
+		(#{replyId}, #{orgId}, #{users})
+		ON DUPLICATE KEY UPDATE reply_id=reply_id, org_id=org_id, users=#{users}
+	</insert>
+
+	<insert id="upsertBgbuNotificationOfReply">
+		INSERT INTO `dms_community`.`reply_bgbu_notification`
+		(`reply_id`, `org_id`, `users`)
+		VALUES
+		(#{replyId}, #{orgId}, #{users})
+		ON DUPLICATE KEY UPDATE reply_id=reply_id, org_id=org_id, users=#{users}
+	</insert>
+
+	<select id="getOrgMemberNotificationOfReply"
+		resultType="com.delta.dms.community.dao.entity.OrgIdWithUsers">
+		SELECT `org_id`, `users`
+		FROM `dms_community`.`reply_orgMember_notification`
+		where `reply_id` = #{replyId}
+	</select>
+
+	<select id="getBgbuNotificationOfReply"
+		resultType="com.delta.dms.community.dao.entity.OrgIdWithUsers">
+		SELECT `org_id`, `users`
+		FROM `dms_community`.`reply_bgbu_notification`
+		where `reply_id` = #{replyId}
+	</select>
+
+	<delete id="deleteOrgMemberNotificationOfReply">
+		DELETE FROM
+		dms_community.reply_orgMember_notification
+		WHERE reply_id=#{replyId}
+	</delete>
+
+	<delete id="deleteBgbuNotificationOfReply">
+		DELETE FROM dms_community.reply_bgbu_notification
+		WHERE reply_id=#{replyId}
+	</delete>
+  
+  <insert id="insertReplyAttachmentAppField">
+    INSERT INTO reply_attachment_app_field
+    (attachment_id, app_field_id)
+    VALUES
+    <foreach collection="appFieldIdList" item="item" index="index" open="(" separator="),(" close=")">
+      #{attachmentId}, #{item}
+    </foreach>
+    ON DUPLICATE KEY UPDATE attachment_id=attachment_id, app_field_id=app_field_id
+  </insert>
+  
+  <delete id="deleteReplyAttachmentAppField">
+    DELETE FROM reply_attachment_app_field
+    WHERE attachment_id = #{attachmentId}
+  </delete>
+  
+  <select id="getReplyAttachmentAppField" resultType="IdNameEntity">
+    SELECT RAAF.app_field_id AS `id`,
+    <choose>
+      <when test="lang == 'enUs'">I.en_US</when>
+      <when test="lang == 'zhCn'">CASE I.zh_CN WHEN '' THEN I.en_US ELSE I.zh_CN END</when>
+      <otherwise>CASE I.zh_TW WHEN '' THEN I.en_US ELSE I.zh_TW END</otherwise>
+    </choose>
+    AS `name`
+    FROM reply_attachment_app_field RAAF
+    LEFT JOIN v_dropdown_i18n I ON RAAF.app_field_id = I.dropdown_id
+    WHERE
+    RAAF.attachment_id = #{attachmentId}
+  </select>
+  
+  <select id="getReplyAllAttachmentAppField" resultType="AttachmentAppFieldEntity">
+    SELECT RAAF.attachment_id, RAAF.app_field_id,
+    <choose>
+      <when test="lang == 'enUs'">I.en_US</when>
+      <when test="lang == 'zhCn'">CASE I.zh_CN WHEN '' THEN I.en_US ELSE I.zh_CN END</when>
+      <otherwise>CASE I.zh_TW WHEN '' THEN I.en_US ELSE I.zh_TW END</otherwise>
+    </choose>
+    AS app_field_name
+    FROM reply_attachment_app_field RAAF
+    LEFT JOIN v_dropdown_i18n I ON RAAF.app_field_id = I.dropdown_id
+    WHERE
+    <choose>
+      <when test="null == attachmentIdList or attachmentIdList.isEmpty()">
+       FALSE
+      </when>
+      <otherwise>
+	      RAAF.attachment_id IN
+		    <foreach collection="attachmentIdList" item="item" index="index" open="(" separator="," close=")">
+		      #{item}
+		    </foreach>
+      </otherwise>
+    </choose>
+  </select>
+  
+  <insert id="insertReplyAttachmentRecordType">
+    INSERT INTO reply_attachment_record_type
+    (attachment_id, record_type)
+    VALUES
+    <foreach collection="attachmentMap.entrySet()" item="value" index="key" open="(" separator="),(" close=")">
+      #{key}, #{value}
+    </foreach>
+    ON DUPLICATE KEY UPDATE record_type = record_type
+  </insert>
+  
+  <select id="getReplyAllAttachmentRecordType" resultType="IdNameEntity">
+    SELECT attachment_id AS `id`, record_type AS `name`
+    FROM reply_attachment_record_type
+    WHERE
+    attachment_id IN
+    <foreach collection="attachmentIdList" item="item" index="index" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+  </select>
+  
+  <select id="getReplyAttachments" resultType="AttachmentInfo">
+    SELECT A.attachment_id, A.file_name, A.file_ext, IFNULL(RT.record_type, 'RT11') AS record_type,
+    T.topic_title, R.reply_create_user_id AS create_user_id, U.cname AS create_user_name
+    FROM reply_attachment A
+    LEFT JOIN reply_attachment_record_type RT ON A.attachment_id = RT.attachment_id
+    LEFT JOIN replies R ON A.reply_id = R.reply_id
+    LEFT JOIN topics T ON R.follow_topic_id = T.topic_id
+    LEFT JOIN v_user U ON R.reply_create_user_id = U.user_id
+    WHERE A.reply_id = #{replyId} AND A.attachment_status != 'delete'
+  </select>
+
+  <select id="getRepliesByTopicIds" resultType="CustomReplyInfoForExcel">
+    SELECT reply_id AS replyId, follow_topic_id AS followTopicId
+    FROM replies
+    WHERE follow_topic_id IN
+    <foreach collection="topicIds" item="topicId" open="(" separator="," close=")">
+      #{topicId}
+    </foreach>
+  </select>
+
+</mapper>

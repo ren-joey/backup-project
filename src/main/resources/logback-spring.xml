@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %t %level %logger{36}.%M[%L] - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender" init-method="start" destroy-method="stop">
+    <file>/disk/log/community/community.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+      <fileNamePattern>/disk/log/community/community_%d{yyyy-MM-dd}_%i.log</fileNamePattern>
+      <MaxHistory>20</MaxHistory>
+      <MaxFileSize>20MB</MaxFileSize>
+      <TotalSizeCap>20GB</TotalSizeCap>
+      <maxHistory>30</maxHistory>
+    </rollingPolicy>
+    <encoder>
+      <pattern>%d{yyyy/MM/dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="ASYNCSTDOUT" class="ch.qos.logback.classic.AsyncAppender">
+    <appender-ref ref="STDOUT" />
+    <includeCallerData>true</includeCallerData>
+  </appender>
+  <appender name="ASYNCFILE" class="ch.qos.logback.classic.AsyncAppender">
+    <appender-ref ref="FILE" />
+  </appender>
+  <logger name="com.delta" level="DEBUG" additivity="false">
+    <appender-ref ref="ASYNCSTDOUT" />
+    <appender-ref ref="ASYNCFILE" />
+  </logger>
+
+  <logger name="org.springframework" level="INFO" additivity="false">
+    <appender-ref ref="ASYNCSTDOUT" />
+  </logger>
+
+  <root level="ERROR">
+    <appender-ref ref="ASYNCFILE" />
+  </root>
+</configuration>

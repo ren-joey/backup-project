@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.MedalDao">
+
+  <update id="setCommunityActivateMedal">
+    UPDATE `v_medal` SET `selected` = IF(ISNULL(#{medalId}), 0, IF(`medal_id` = #{medalId}, 1, 0))
+    WHERE `id` = #{communityId} AND `type` = 'COMMUNITY'
+  </update>
+
+  <select id="selectMedals" resultType="Medal">
+    SELECT `id` AS `targetId`, `selected`, `medal_id` AS `id`, `medal_name` AS `name`, `disabled`, `expire_time`,
+    CASE #{medalIdType} WHEN 'USER' THEN `user_frame` WHEN 'COMMUNITY' THEN `group_frame` END AS `frame`,
+    `title`, `certification`, `certification_order`
+    FROM `v_medal`
+    WHERE `id` IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    AND `type` = #{medalIdType}
+    ORDER BY `create_time` DESC
+  </select>
+
+  <select id="getCommunityAwards" resultType="com.delta.dms.community.swagger.model.AwardDto">
+    SELECT `contest_name`, `award_title` AS `title`, `contest_proposal`, `team_name`, `link`
+    FROM `v_community_award`
+    WHERE `id` = #{communityId} AND `disabled` = 0
+    ORDER BY `create_time` DESC
+  </select>
+  
+  <select id="getCertificationByIdAndType" resultType="String">
+    SELECT DISTINCT vm.certification AS medal_certification
+    FROM dms_medal.v_medal vm
+    WHERE vm.id = #{id} AND vm.`type` = #{medalType} AND vm.certification != ''
+    ORDER BY vm.certification_order
+  </select>
+
+</mapper>

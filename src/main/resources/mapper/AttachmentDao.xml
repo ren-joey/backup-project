@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.AttachmentDao">
+
+  <insert id="insertAttachmentKeyman">
+    DELETE FROM
+    dms_community.attachment_keyman
+    WHERE attachment_id=#{attachmentId};
+
+    INSERT INTO
+    dms_community.attachment_keyman
+    (attachment_id, user_id)
+    VALUES
+    <foreach collection="userId" item="item" index="index" open="(" separator="),(" close=")">
+      #{attachmentId}, #{item}
+    </foreach>
+    ;
+  </insert>
+</mapper>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.DrcSyncDao">
+    <insert id="updateFileStatus">
+        INSERT INTO ${database}.drc_sync (action, topic_id, community_id, forum_id, response_code, response_body)
+        VALUES (#{action}, #{topicId}, #{communityId}, #{forumId}, #{responseCode}, #{responseBody})
+    </insert>
+
+    <select id="findDrcSyncLogsForSpecificActions" resultType="com.delta.dms.community.model.DrcSyncLog">
+        SELECT id, action, topic_id, community_id, forum_id, sync_time, response_code, response_body
+        FROM dms_community_sync.drc_sync
+        WHERE action IN ('create', 'batch_upsert')
+        AND sync_time BETWEEN #{startTime} AND #{endTime}
+    </select>
+</mapper>

@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.DdfDao">
+
+  <sql id="communityColumns">
+    communities.community_id, communities.community_name, communities.community_desc, communities.community_status,
+    UPPER(communities.community_type) AS community_type, UPPER(communities.community_category) AS community_category,
+    communities.community_create_user_id, communities.community_create_time, communities.community_modified_time,
+    communities.community_last_modified_user_id, communities.community_last_modified_time,
+    communities.community_group_id, communities.community_ddf_id
+  </sql>
+  
+  <sql id="forumColumns">
+    forums.forum_id, forums.forum_name, forums.forum_desc, forums.forum_status, UPPER(forums.forum_type) AS forum_type,
+    forums.forum_create_user_id, forums.forum_create_time, forums.forum_modified_time,
+    forums.forum_last_modified_user_id, forums.forum_last_modified_time, forums.forum_ddf_id
+  </sql>
+  
+  <insert id="upsertDdfQueue">
+    INSERT INTO ddf_generate_queue(`type`, id, `status`, `message`)
+    VALUES (#{type}, #{id}, #{status}, #{message})
+    ON DUPLICATE KEY UPDATE `status`= #{status}, `message`= #{message}
+  </insert>
+
+  <insert id="upsertDdfDeleteQueue">
+    INSERT INTO ddf_delete_queue(ddf_id, `status`, `message`)
+    VALUES (#{id}, #{status}, #{message})
+    ON DUPLICATE KEY UPDATE `status`= #{status}, `message`=#{message}
+  </insert>
+  
+  <select id="getAllInformation" resultType="com.delta.dms.community.swagger.model.AllInformation">
+    <choose>
+      <when test="type == 'community'">
+        SELECT <include refid="communityColumns"/>
+        FROM communities
+        WHERE community_id=#{id}
+      </when>
+      <when test="type == 'forum'">
+        SELECT <include refid="communityColumns"/>, <include refid="forumColumns"/>
+        FROM communities
+        INNER JOIN forums ON communities.community_id=forums.community_id
+        WHERE forum_id=#{id}
+      </when>
+      <when test="type == 'topic'">
+        SELECT <include refid="communityColumns"/>, <include refid="forumColumns"/>,
+        topics.topic_id, topics.topic_title, topics.topic_status,
+        (tt.show_unconclude_state OR topics.topic_conclusion_state_id != 1) AS topicShowState,
+        topics_text.topic_text, UPPER(tt.topic_type) AS topic_type,
+        UPPER(tcs.topic_conclusion_state) AS topic_state, UPPER(topics.topic_situation) AS topic_situation,
+        topics.topic_create_user_id, topics.topic_create_time, topics.topic_modified_time,
+        topics.topic_last_modified_user_id, topics.topic_last_modified_time, topics.topic_ddf_id
+        FROM communities
+        INNER JOIN forums ON communities.community_id=forums.community_id
+        INNER JOIN topics ON forums.forum_id=topics.forum_id
+        INNER JOIN topics_text ON topics.topic_id=topics_text.topic_id
+        LEFT JOIN topic_type tt ON topics.topic_type_id = tt.topic_type_id
+        LEFT JOIN topic_conclusion_state tcs ON topics.topic_conclusion_state_id = tcs.topic_conclusion_state_id
+        WHERE topics.topic_id=#{id}
+      </when>
+    </choose>
+  </select>
+  
+  <update id="storeDdfId">
+    <choose>
+      <when test="type == 'community'">
+        UPDATE communities
+        SET community_ddf_id = #{uuid}
+        WHERE community_id = #{id}
+      </when>
+      <when test="type == 'forum'">
+        UPDATE forums
+        SET forum_ddf_id = #{uuid}
+        WHERE forum_id = #{id}
+      </when>
+      <when test="type == 'topic'">
+        UPDATE topics
+        SET topic_ddf_id = #{uuid}
+        WHERE topic_id = #{id}
+      </when>
+    </choose>
+  </update>
+  
+  <select id="getDdfQueueByStatus" resultType="com.delta.dms.community.dao.entity.DdfQueue">
+    SELECT `type`, id
+    FROM ddf_generate_queue
+    WHERE `status` = #{status}
+    ORDER BY time_stamp LIMIT 100
+  </select>
+  
+  <select id="getDdfDeleteQueueByStatus" resultType="String">
+    SELECT ddf_id
+    FROM ddf_delete_queue
+    WHERE `status` = #{status} LIMIT 100
+  </select>
+
+  <select id="getDdfDeleteQueueByStatusAndAssociatedId" resultType="string">
+    SELECT ddf_id
+    FROM ddf_delete_queue
+    WHERE JSON_EXTRACT(`message`, '$.associatedId') = #{associatedId}
+    AND JSON_EXTRACT(`message`, '$.type') = #{fileType}
+  </select>
+
+  <update id="updateDdfQueueStatus">
+    UPDATE ddf_generate_queue
+    SET `status` = #{status}
+    WHERE `type` = #{type} AND id IN
+    <foreach collection="ids" item="item" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+  </update>
+  
+  <update id="updateDdfDeleteQueueStatus">
+    UPDATE ddf_delete_queue
+    SET `status` = #{status}
+    WHERE ddf_id IN
+    <foreach collection="ids" item="item" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+  </update>
+  
+  <delete id="deleteDdfQueue">
+    DELETE FROM ddf_generate_queue
+    WHERE `type` = #{type} AND id = #{id}
+  </delete>
+  
+  <delete id="deleteDdfDeleteQueue">
+    DELETE FROM ddf_delete_queue
+    WHERE ddf_id = #{id}
+  </delete>
+
+</mapper>

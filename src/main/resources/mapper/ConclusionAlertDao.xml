@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.ConclusionAlertDao">
+
+  <resultMap type="ForumConclusionAlert" id="ConclusionAlertResultMap">
+    <association property="groups" column="{forumId=forum_id}" select="getConclusionAlertGroup" />
+    <association property="rules" column="{forumId=forum_id}" select="getConclusionAlertRule" />
+  </resultMap>
+
+  <select id="getConclusionAlert" resultMap="ConclusionAlertResultMap">
+    SELECT
+    forum_id,
+    forum_conclusion_alert_group_last_modified_time AS groupLastModifiedTime,
+    forum_conclusion_alert_rule_last_modified_time AS ruleLastModifiedTime
+    FROM
+    forum_conclusion_alert
+    WHERE
+    forum_id = #{forumId}
+  </select>
+
+  <resultMap type="ForumConclusionAlertGroup" id="ConclusionAlertGroupResultMap">
+    <association property="members" column="{groupId=groupId}" select="getConclusionAlertGroupMember" />
+  </resultMap>
+
+  <select id="getConclusionAlertGroup" resultMap="ConclusionAlertGroupResultMap">
+    SELECT
+    forum_conclusion_alert_group_id AS groupId, forum_conclusion_alert_group_name AS groupName
+    FROM
+    forum_conclusion_alert_group
+    WHERE
+    forum_id = #{forumId}
+  </select>
+
+  <select id="getConclusionAlertGroupMember" resultType="ForumConclusionAlertMember">
+    SELECT
+    forum_conclusion_alert_group_user_id AS memberId,
+    U.cname AS memberName
+    FROM
+    forum_conclusion_alert_group_member FCAGM
+    LEFT JOIN
+    v_user U
+    ON U.user_id = FCAGM.forum_conclusion_alert_group_user_id
+    WHERE
+    forum_conclusion_alert_group_id = #{groupId}
+  </select>
+
+  <resultMap type="ForumConclusionAlertRule" id="ConclusionAlertRuleResultMap">
+    <association property="members" column="{ruleId=ruleId}" select="getConclusionAlertRuleMember" />
+  </resultMap>
+
+  <select id="getConclusionAlertRule" resultMap="ConclusionAlertRuleResultMap">
+    SELECT
+    FCAR.forum_conclusion_alert_rule_id AS ruleId,
+    FCAR.forum_conclusion_alert_rule_start_day AS startDay, FCAR.forum_conclusion_alert_rule_end_day AS endDay,
+    FCAR.factory_id, FCARCD.dropdown_name AS factoryName, FCAR.rule_type
+    FROM
+    forum_conclusion_alert_rule FCAR
+    LEFT JOIN forum_conclusion_alert_rule_column_dropdown FCARCD ON FCAR.factory_id = FCARCD.dropdown_id
+    WHERE
+    FCAR.forum_id = #{forumId}
+    ORDER BY FCAR.forum_conclusion_alert_rule_start_day
+  </select>
+
+  <select id="getConclusionAlertRuleMember" resultType="ForumConclusionAlertMember">
+    SELECT
+    FCARM.forum_conclusion_alert_rule_member_id AS memberId,
+    IF(FCARM.forum_conclusion_alert_rule_member_type = 'group', FCAG.forum_conclusion_alert_group_name, U.cname) AS memberName,
+    FCARM.forum_conclusion_alert_rule_member_type AS memberType
+    FROM
+    forum_conclusion_alert_rule_member FCARM
+    LEFT JOIN
+    forum_conclusion_alert_group FCAG
+    ON FCAG.forum_conclusion_alert_group_id = FCARM.forum_conclusion_alert_rule_member_id
+    AND FCARM.forum_conclusion_alert_rule_member_type = 'group'
+    LEFT JOIN
+    v_user U
+    ON U.user_id = FCARM.forum_conclusion_alert_rule_member_id
+    AND FCARM.forum_conclusion_alert_rule_member_type = 'user'
+    WHERE
+    forum_conclusion_alert_rule_id = #{ruleId}
+  </select>
+
+  <insert id="upsertConclusionAlertGroupModifiedTime">
+    INSERT INTO
+    forum_conclusion_alert
+    (forum_id, forum_conclusion_alert_group_last_modified_user_id, forum_conclusion_alert_group_last_modified_time)
+    VALUES
+    (#{forumId}, #{userId}, #{time})
+    ON DUPLICATE KEY UPDATE
+    forum_conclusion_alert_group_last_modified_user_id = #{userId},
+    forum_conclusion_alert_group_last_modified_time = #{time}
+  </insert>
+
+  <insert id="upsertConclusionAlertRuleModifiedTime">
+    INSERT INTO
+    forum_conclusion_alert
+    (forum_id, forum_conclusion_alert_rule_last_modified_user_id, forum_conclusion_alert_rule_last_modified_time)
+    VALUES
+    (#{forumId}, #{userId}, #{time})
+    ON DUPLICATE KEY UPDATE
+    forum_conclusion_alert_rule_last_modified_user_id = #{userId},
+    forum_conclusion_alert_rule_last_modified_time = #{time}
+  </insert>
+
+  <insert id="insertConclusionAlertGroup" keyProperty="groupId" useGeneratedKeys="true">
+    INSERT INTO
+    forum_conclusion_alert_group
+    (forum_id, forum_conclusion_alert_group_name)
+    VALUES
+    <foreach collection="group" item="item" index="index" open="(" separator="),(" close=")">
+      #{item.forumId}, #{item.groupName}
+    </foreach>
+  </insert>
+
+  <insert id="insertConclusionAlertGroupMember">
+    INSERT INTO
+    forum_conclusion_alert_group_member
+    (forum_conclusion_alert_group_id, forum_conclusion_alert_group_user_id)
+    VALUES
+    <foreach collection="group" item="item" open="" separator="," close="">
+      <foreach collection="item.members" item="member" index="index" open="(" separator="),(" close=")">
+        #{item.groupId}, #{member.memberId}
+      </foreach>
+    </foreach>
+  </insert>
+
+  <update id="updateConclusionAlertGroup">
+    UPDATE forum_conclusion_alert_group
+    SET
+    forum_conclusion_alert_group_name =
+    <foreach collection="group" item="item" index="index" open="CASE forum_conclusion_alert_group_id" separator=" " close="END">
+      WHEN #{item.groupId} THEN #{item.groupName}
+    </foreach>
+    WHERE forum_conclusion_alert_group_id IN
+    <foreach collection="group" item="item" index="index" open="(" separator="," close=")">
+        #{item.groupId}
+    </foreach>
+  </update>
+
+  <delete id="deleteConclusionAlertGroup">
+    DELETE FROM
+    forum_conclusion_alert_group
+    WHERE forum_conclusion_alert_group_id IN
+    <foreach collection="groupId" item="item" index="index" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+  </delete>
+
+  <delete id="deleteConclusionAlertGroupMember">
+    DELETE FROM
+    forum_conclusion_alert_group_member
+    WHERE forum_conclusion_alert_group_id IN
+    <foreach collection="groupId" item="item" index="index" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+  </delete>
+
+  <insert id="insertConclusionAlertRule" keyProperty="ruleId" useGeneratedKeys="true">
+    INSERT INTO
+    forum_conclusion_alert_rule
+    (forum_id, forum_conclusion_alert_rule_start_day, forum_conclusion_alert_rule_end_day, factory_id, rule_type)
+    VALUES
+    <foreach collection="rule" item="item" index="index" open="(" separator="),(" close=")">
+      #{item.forumId}, #{item.startDay}, #{item.endDay}, #{item.factoryId}, #{item.ruleType}
+    </foreach>
+  </insert>
+
+  <insert id="insertConclusionAlertRuleMember">
+    INSERT INTO
+    forum_conclusion_alert_rule_member
+    (forum_conclusion_alert_rule_id, forum_conclusion_alert_rule_member_id, forum_conclusion_alert_rule_member_type)
+    VALUES
+    <foreach collection="rule" item="item" open="" separator="," close="">
+      <foreach collection="item.members" item="member" index="index" open="(" separator="),(" close=")">
+        #{item.ruleId}, #{member.memberId}, #{member.memberType}
+      </foreach>
+    </foreach>
+  </insert>
+
+  <update id="updateConclusionAlertRule">
+    UPDATE forum_conclusion_alert_rule
+    SET
+    forum_conclusion_alert_rule_start_day =
+    <foreach collection="rule" item="item" index="index" open="CASE forum_conclusion_alert_rule_id" separator=" " close="END">
+      WHEN #{item.ruleId} THEN #{item.startDay}
+    </foreach>
+    ,
+    forum_conclusion_alert_rule_end_day =
+    <foreach collection="rule" item="item" index="index" open="CASE forum_conclusion_alert_rule_id" separator=" " close="END">
+      WHEN #{item.ruleId} THEN #{item.endDay}
+    </foreach>
+    ,
+    factory_id =
+    <foreach collection="rule" item="item" index="index" open="CASE forum_conclusion_alert_rule_id" separator=" " close="END">
+      WHEN #{item.ruleId} THEN #{item.factoryId}
+    </foreach>
+    WHERE forum_conclusion_alert_rule_id IN
+    <foreach collection="rule" item="item" index="index" open="(" separator="," close=")">
+        #{item.ruleId}
+    </foreach>
+  </update>
+
+  <delete id="deleteConclusionAlertRule">
+    DELETE FROM
+    forum_conclusion_alert_rule
+    WHERE forum_conclusion_alert_rule_id IN
+    <foreach collection="ruleId" item="item" index="index" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+  </delete>
+
+  <delete id="deleteConclusionAlertRuleMember">
+    DELETE FROM
+    forum_conclusion_alert_rule_member
+    WHERE forum_conclusion_alert_rule_id IN
+    <foreach collection="ruleId" item="item" index="index" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+  </delete>
+
+  <delete id="deleteConclusionAlertRuleGroupMember">
+    DELETE FROM
+    forum_conclusion_alert_rule_member
+    WHERE forum_conclusion_alert_rule_member_id IN
+    <foreach collection="memberId" item="item" index="index" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+    AND forum_conclusion_alert_rule_member_type = 'group'
+  </delete>
+
+  <select id="searchGroupByName" resultType="ForumConclusionAlertMember">
+    SELECT
+    forum_conclusion_alert_group_id AS memberId,
+    forum_conclusion_alert_group_name AS memberName
+    FROM
+    forum_conclusion_alert_group
+    WHERE
+    forum_id = #{forumId} AND forum_conclusion_alert_group_name LIKE CONCAT('%',#{q},'%')
+    ORDER BY forum_conclusion_alert_group_id
+    LIMIT #{limit}
+  </select>
+
+  <resultMap type="ForumConclusionAlertRule" id="ConclusionAlertRuleWthFlatMemberesultMap">
+    <association property="members" column="{ruleId=ruleId}" select="getConclusionAlertRuleFlatMember" />
+  </resultMap>
+
+  <select id="getAllConclusionAlertRuleWthFlatMember" resultMap="ConclusionAlertRuleWthFlatMemberesultMap">
+    SELECT
+    FCAR.forum_conclusion_alert_rule_id AS ruleId, FCAR.forum_id,
+    FCAR.forum_conclusion_alert_rule_start_day AS startDay, FCAR.forum_conclusion_alert_rule_end_day AS endDay,
+    FCAR.factory_id, FCARCD.dropdown_name AS factoryName, FCAR.rule_type
+    FROM forum_conclusion_alert_rule FCAR
+    LEFT JOIN forum_conclusion_alert_rule_column_dropdown FCARCD ON FCAR.factory_id = FCARCD.dropdown_id
+    ORDER BY FCAR.forum_id, FCAR.forum_conclusion_alert_rule_start_day
+  </select>
+
+  <select id="getConclusionAlertRuleFlatMember" resultType="ForumConclusionAlertMember">
+    SELECT
+    DISTINCT forum_conclusion_alert_rule_member_id AS memberId
+    FROM
+    forum_conclusion_alert_rule_member
+    WHERE forum_conclusion_alert_rule_id = #{ruleId}
+    AND forum_conclusion_alert_rule_member_type = 'user'
+    UNION ALL
+    SELECT
+    DISTINCT forum_conclusion_alert_group_user_id AS memberId
+    FROM
+    forum_conclusion_alert_group_member
+    WHERE forum_conclusion_alert_group_id IN 
+      (SELECT
+      forum_conclusion_alert_rule_member_id
+      FROM
+      forum_conclusion_alert_rule_member
+      WHERE
+      forum_conclusion_alert_rule_id = #{ruleId}
+      AND forum_conclusion_alert_rule_member_type = 'group')
+  </select>
+
+  <select id="getConclusionAlertRuleWthFlatMember" resultMap="ConclusionAlertRuleWthFlatMemberesultMap">
+    SELECT
+    FCAR.forum_conclusion_alert_rule_id AS ruleId, forum_id,
+    FCAR.forum_conclusion_alert_rule_start_day AS startDay, FCAR.forum_conclusion_alert_rule_end_day AS endDay,
+    FCAR.factory_id, FCARCD.dropdown_name AS factoryName, FCAR.rule_type
+    FROM forum_conclusion_alert_rule FCAR
+    LEFT JOIN forum_conclusion_alert_rule_column_dropdown FCARCD ON FCAR.factory_id = FCARCD.dropdown_id
+    WHERE
+    forum_id = #{forumId} AND rule_type = #{ruleType}
+    AND #{day} BETWEEN forum_conclusion_alert_rule_start_day AND forum_conclusion_alert_rule_end_day
+    ORDER BY forum_id, forum_conclusion_alert_rule_start_day
+  </select>
+  
+  <select id="getRuleColumnByCommunityId" resultType="RuleColumnEntity">
+    SELECT
+    FCART.rule_column_id, FCART.rule_column_name, FCART.rule_column_type
+    FROM
+    community_special_type_rule_column_mapping CSTRTM
+    LEFT JOIN forum_conclusion_alert_rule_column FCART ON CSTRTM.rule_column_id = FCART.rule_column_id
+    WHERE CSTRTM.community_special_type_id = 
+      (SELECT community_special_type_id FROM community_support_special_type WHERE community_id = #{communityId})
+    ORDER BY CSTRTM.rule_column_order
+  </select>
+  
+  <select id="getDropdownByColumnId" resultType="IdNameEntity">
+    SELECT
+    dropdown_id AS `id`, dropdown_name AS `name`
+    FROM
+    forum_conclusion_alert_rule_column_dropdown
+    WHERE rule_column_id = #{columnId}
+  </select>
+  
+  <select id="getRangeDayByColumnId" resultType="EerpRangeDayEntity">
+    SELECT
+    allow_limit, from_day, end_day
+    FROM
+    forum_conclusion_alert_rule_column_rangeday
+    WHERE rule_column_id = #{columnId}
+  </select>
+</mapper>

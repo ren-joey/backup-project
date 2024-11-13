@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: community
+  cloud:
+    config:
+      fail-fast: true
+      uri: https://dmsapp.deltaww.com/configserver
+      username: config
+      password: KLMA3aWwthJ=4YwV
+      retry:
+        max-attempts: 1000
+        max-interval: 1000
+  rabbitmq:
+    host: 10.136.129.27
+    port: 5672
+    username: admin
+    password: mqP@ssw0rd

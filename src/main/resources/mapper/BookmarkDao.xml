@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.BookmarkDao">
+
+  <insert id="setBookmark">
+    INSERT INTO
+    dms_community.bookmark
+    (user_id, object_id, object_pk,
+    bookmark_create_time)
+    VALUES
+    (#{userId}, (SELECT object_id FROM dms_community.objects where object_name=#{object}), #{objectPk},
+    #{createTime})
+    ON DUPLICATE KEY UPDATE user_id=user_id, object_id=object_id, object_pk=object_pk
+  </insert>
+
+  <delete id="removeBookmark">
+    DELETE FROM dms_community.bookmark
+    WHERE
+    user_id=#{userId} AND object_pk=#{objectPk}
+  </delete>
+
+  <select id="checkUserBookmark" resultType="Integer">
+    SELECT COUNT(*)
+    FROM dms_community.bookmark
+    WHERE user_id=#{userId} AND object_pk=#{objectPk}
+  </select>
+</mapper>

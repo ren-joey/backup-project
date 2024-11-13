@@ -1,0 +1,698 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.delta.dms.community.dao.ForumDao">
+  <sql id="selectStatus">
+    IF(users.status = 0, 'active', 'inactive') AS `status`
+  </sql>
+
+  <resultMap type="ForumInfo" id="ForumInfoResultMap">
+    <association property="supportTopicType" column="{forumId=forum_id,communityId=community_id,lang=lang}" select="getForumSupportTopicType" />
+    <association property="conclusionAlert" column="{communityId=community_id}" select="getConclusionAlert" />
+  </resultMap>
+
+  <select id="getForumById" resultMap="ForumInfoResultMap">
+    SELECT
+    F.forum_id, F.community_id, C.community_name, F.forum_type,
+    F.forum_name, F.forum_desc, F.forum_img_avatar,
+    F.forum_status, F.forum_create_user_id, F.forum_create_time,
+    F.forum_modified_user_id, F.forum_modified_time, F.forum_delete_user_id,
+    F.forum_delete_time, F.forum_last_modified_user_id, F.forum_last_modified_time, F.forum_ddf_id, F.forum_topping_order,
+    #{lang} AS lang
+    FROM
+    forums F
+    LEFT JOIN communities C ON C.community_id = F.community_id
+    WHERE
+    forum_id = #{forumId}
+    AND forum_status != 'delete'
+  </select>
+
+  <select id="getForumSupportTopicType" resultType="TopicTypeEntity">
+    SELECT
+    TT.topic_type, TT.editable, TT.app_field_default_id, TT.archive_conclusion_attachment,
+    IFNULL(
+	    <choose>
+	      <when test="lang == 'enUs'">D.en_US</when>
+	      <when test="lang == 'zhCn'">CASE D.zh_CN WHEN '' THEN D.en_US ELSE D.zh_CN END</when>
+	      <otherwise>CASE D.zh_TW WHEN '' THEN D.en_US ELSE D.zh_TW END</otherwise>
+	    </choose>
+    , '')
+    AS `app_field_default_name`
+    FROM
+    dms_community.topic_type TT
+    LEFT JOIN v_dropdown_i18n D ON TT.app_field_default_id = D.dropdown_id
+    WHERE TT.topic_type_id IN
+      (SELECT
+      DISTINCT topic_type_id
+      FROM
+      dms_community.community_special_type_mapping
+      WHERE
+      community_special_type_id = (SELECT community_special_type_id FROM dms_community.community_support_special_type WHERE community_id = #{communityId})
+      UNION SELECT
+      topic_type_id
+      FROM
+      dms_community.forum_support_topic_type 
+      WHERE
+      forum_id = IF(EXISTS(SELECT forum_id FROM dms_community.forum_support_topic_type WHERE forum_id = #{forumId}), #{forumId}, 0))
+  </select>
+
+  <select id="getConclusionAlert" resultType="boolean">
+    SELECT
+    IF(COUNT(community_special_type_id) > 0, conclusion_alert, 0)
+    FROM
+    dms_community.community_special_type
+    WHERE community_special_type_id = 
+      (SELECT
+      community_special_type_id
+      FROM
+      dms_community.community_support_special_type
+      WHERE
+      community_id = #{communityId})
+  </select>
+
+  <select id="getAllByCommunityIdAndStatus" resultType="ForumInfo">
+    SELECT
+    forum_id, community_id, forum_type,
+    forum_name, forum_desc, forum_img_avatar,
+    forum_status, forum_create_user_id, forum_create_time,
+    forum_modified_user_id, forum_modified_time, forum_delete_user_id,
+    forum_delete_time, forum_last_modified_user_id, forum_last_modified_time
+    FROM
+    dms_community.forums
+    WHERE
+    community_id = #{communityId} AND forum_status=#{forumStatus}
+  </select>
+
+  <insert id="add" keyProperty="forumId" useGeneratedKeys="true">
+    INSERT INTO
+    dms_community.forums
+    (community_id, forum_name, forum_desc,
+    forum_type, forum_status, forum_create_user_id,
+    forum_create_time, forum_last_modified_user_id, forum_last_modified_time,
+    forum_img_avatar, forum_modified_user_id, forum_modified_time,
+    forum_delete_user_id, forum_delete_time, forum_last_topic_id,
+    forum_ddf_id, forum_topping_order
+    )
+    VALUES
+    (#{communityId}, #{forumName}, #{forumDesc},
+    #{forumType}, #{forumStatus}, #{forumCreateUserId},
+    #{forumCreateTime}, #{forumLastModifiedUserId}, #{forumLastModifiedTime},
+    #{forumImgAvatar}, #{forumModifiedUserId}, #{forumModifiedTime},
+    #{forumDeleteUserId}, #{forumDeleteTime}, #{forumLastTopicId},
+    '', #{forumToppingOrder}
+    )
+  </insert>
+
+  <update id="update">
+    UPDATE dms_community.forums
+    SET forum_name = #{forumName}, forum_type = #{forumType}, forum_status = #{forumStatus},
+    forum_modified_user_id = #{forumModifiedUserId}, forum_modified_time = #{forumModifiedTime}
+    <if test="communityId != 0">
+      , community_id = #{communityId}
+    </if>
+    WHERE
+    forum_id = #{forumId}
+  </update>
+
+  <update id="delete">
+    UPDATE dms_community.forums
+    SET forum_status = #{forumStatus}, forum_delete_user_id = #{forumDeleteUserId}, forum_delete_time = #{forumDeleteTime}
+    WHERE
+    forum_id =
+    #{forumId};
+  </update>
+
+  <select id="getForumOfCommunityByTypeWithSortAndLimit" resultType="ForumInfo">
+    <choose>
+      <when test="sortField != 'privilege'">
+        SELECT *
+        FROM dms_community.forums
+        WHERE
+        community_id = #{communityId}
+        AND
+        forum_type IN
+        <foreach item="item" index="index" collection="forumType" open="(" separator="," close=")">
+          #{item}
+        </foreach>
+        AND forum_status != 'delete'
+	    <!-- 假如是dl人員，就將白名單加入做filter，取得交集結果 -->
+	    <if test="isDL==true">
+		  AND FIND_IN_SET (forum_id , #{allowForumId})
+		</if>
+        ORDER BY ${sortField} ${sortOrder}, forum_name ASC
+        <if test="limit >= 0 and offset >= 0">
+          LIMIT #{offset},#{limit}
+        </if>
+      </when>
+      <when test="sortField == 'privilege'">
+        SELECT DISTINCTROW pr.forum_id, pr.community_id, pr.forum_type, pr.forum_name, pr.forum_desc, pr.forum_status, pr.forum_last_modified_user_id,
+          pr.forum_last_modified_time, pr.forum_topping_order, pr.forum_create_user_id,
+          pr.has_permission
+        FROM (
+        SELECT f.forum_id, f.community_id, f.forum_type, f.forum_name, f.forum_desc, f.forum_status, f.forum_last_modified_user_id,
+          f.forum_last_modified_time, f.forum_topping_order, f.forum_create_user_id,
+          cr_role.role_id AS cr_role_id, fr_role.role_id AS fr_role_id,
+          CASE
+          WHEN f.forum_type = "system" THEN 1
+          WHEN f.forum_type = "public" THEN 1
+          WHEN f.forum_type = "private" THEN
+          CASE
+          WHEN #{isSysAdmin} THEN 1
+          WHEN cr_role.role_id = 1 THEN 1
+          WHEN fr_role.role_id = 3 THEN 1
+          WHEN fr_role.role_id = 4 THEN 1
+          ELSE 0
+          END
+          ELSE 0
+          END as has_permission
+        FROM forums f
+          LEFT JOIN (
+            SELECT cr.community_id, cr.role_id, users.user_id
+            FROM dms_community.community_role cr
+              INNER JOIN dms_community.v_user_w_group as users on cr.group_id = users.gid
+            WHERE cr.community_id = #{communityId} AND FIND_IN_SET(users.user_id, #{userId})
+          ) AS cr_role ON f.community_id  = cr_role.community_id
+          LEFT JOIN (
+            SELECT forums.community_id, forums.forum_id, fr.role_id, fusers.user_id
+            FROM dms_community.forum_role fr
+              INNER JOIN dms_community.v_user_w_group as fusers on fr.group_id = fusers.gid
+              INNER JOIN dms_community.forums ON forums.forum_id = fr.forum_id
+            WHERE forums.community_id = #{communityId} AND FIND_IN_SET(fusers.user_id, #{userId})
+          ) AS fr_role ON f.forum_id  = fr_role.forum_id
+        WHERE f.community_id = #{communityId} AND f.forum_status != 'delete'
+	    <!-- 假如是dl人員，就將白名單加入做filter，取得交集結果 -->
+	    <if test="isDL==true">
+		  AND FIND_IN_SET (f.forum_id , #{allowForumId})
+		</if>
+        ) pr
+        ORDER BY pr.has_permission DESC, pr.forum_name ASC
+        <if test="limit >= 0 and offset >= 0">
+          LIMIT #{offset},#{limit}
+        </if>
+      </when>
+    </choose>
+  </select>
+
+  <select id="getTopingForumOfCommunityByTypeWithSortAndLimit" resultType="ForumInfo">
+    SELECT *
+    FROM dms_community.forums
+    WHERE
+    community_id = #{communityId}
+    AND
+    forum_type IN
+    <foreach item="item" index="index" collection="forumType" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+    AND forum_status != 'delete' AND forum_topping_order != 0
+    ORDER BY forum_topping_order DESC
+  </select>
+
+  <select id="countForumOfCommunity" resultType="java.lang.Integer">
+    SELECT COUNT(*)
+    FROM dms_community.forums
+    WHERE community_id=#{communityId} AND
+    forum_type IN
+    <foreach item="item" index="index" collection="forumType" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+    AND forum_status != 'delete'
+    <!-- 假如是dl人員，就將白名單加入做filter，取得交集結果 -->
+    <if test="isDL==true">
+	  AND FIND_IN_SET (forum_id , #{allowForumId})
+	</if>
+  </select>
+
+  <select id="checkApplicationExists" resultType="java.lang.Integer">
+    SELECT count(*) as count
+    FROM dms_community.forum_join_review
+    WHERE application_id=#{applicantId} AND forum_id=#{forumId} AND status=''
+  </select>
+
+  <insert id="addUserIntoForumJoinReview">
+    INSERT INTO
+    dms_community.forum_join_review
+    (forum_id, application_id, application_desc, application_time,
+    reviewer_id, review_time, status)
+    VALUES (#{forumId}, #{applicationId}, #{applicationDesc}, #{applicationTime},
+    '', 0, '')
+    ON DUPLICATE KEY UPDATE forum_id=forum_id, application_id=application_id,application_desc=#{applicationDesc},
+    application_time=#{applicationTime}, reviewer_id='', review_time=0, status=''
+  </insert>
+
+  <select id="getApplicantList" resultType="hashMap">
+    SELECT application_id, application_desc
+    FROM dms_community.forum_join_review
+    WHERE forum_id=#{forumId} AND status=''
+  </select>
+
+  <update id="reviewTheMemberApplicationOfForum">
+    UPDATE dms_community.forum_join_review
+    SET reviewer_id=#{reviewerId}, review_time=#{reviewTime}, status=#{status}
+    WHERE application_id=#{applicantId} AND forum_id=#{forumId} AND status=''
+  </update>
+
+  <insert id="addRoleIntoForum">
+    INSERT INTO
+    dms_community.forum_role
+    (group_id, forum_id, role_id)
+    VALUES
+    <foreach collection="groupId" item="item" index="index" open="(" separator="),(" close=")">
+      #{item}, #{forumId}, #{roleId}
+    </foreach>
+    ON DUPLICATE KEY UPDATE group_id=group_id, forum_id=forum_id, role_id=role_id
+  </insert>
+
+  <select id="getMemberListWithSortAndLimit" resultType="com.delta.dms.community.swagger.model.User">
+    <choose>
+      <when test="toGetCount == true">
+        SELECT COUNT(DISTINCT(user_id)) AS total_count
+      </when>
+      <when test="toGetCount == false">
+        SELECT user_id as id, min(role_id) as role_id, account, cname as name, mail,
+              IF(status = 0, 'active', 'inactive') AS `status`
+      </when>
+    </choose>
+    FROM
+    (
+    SELECT users.user_id, forum_role.role_id, users.account, users.cname, users.mail,
+      users.status, 1 AS is_application_group
+    FROM dms_community.v_user_w_group users
+      INNER JOIN (SELECT * FROM dms_community.forum_role WHERE forum_id=#{forumId}) forum_role
+          ON users.gid=forum_role.group_id
+    where forum_role.forum_id =#{forumId}
+    UNION
+    SELECT users.user_id, community_role.role_id, users.account, users.cname, users.mail,
+      users.status, community_role.is_application_group
+    FROM dms_community.v_user_w_group users
+      INNER JOIN dms_community.community_role as community_role ON users.gid=community_role.group_id
+      INNER JOIN dms_community.forums as f ON f.community_id=community_role.community_id
+    where f.forum_id =#{forumId}
+    ) AS full_member
+    where (1+1 > 0)
+    <if test="userIdList != null and userIdList.size() > 0">
+      and user_id IN
+      <foreach item="item" index="index" collection="userIdList" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="excludeUserIdList != null and excludeUserIdList.size() > 0">
+      and user_id NOT IN
+      <foreach item="item" index="index" collection="excludeUserIdList" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="roleIdList != null and roleIdList.size() > 0">
+      and role_id IN
+      <foreach item="item" index="index" collection="roleIdList" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="name != '' and  name != null">
+      and upper(cname) LIKE CONCAT('%',upper(#{name}),'%')
+    </if>
+    <if test="toIncludeDmsMember == false">
+      and is_application_group = 1
+    </if>
+    <if test="toGetCount == false">
+      GROUP BY user_id
+      ORDER BY
+      <choose>
+        <when test="sortField == 'role'">
+          +role_id, +cname
+        </when>
+        <otherwise>
+          +cname
+        </otherwise>
+      </choose>
+      <if test="limit >= 0 and offset >= 0">
+        LIMIT #{offset},#{limit}
+      </if>
+    </if>
+  </select>
+
+  <select id="getNotMemberListWithSortAndLimit" resultType="com.delta.dms.community.swagger.model.User">
+    <choose>
+      <when test="toGetCount == true">
+        SELECT COUNT(DISTINCT(user_id)) AS total_count
+      </when>
+      <when test="toGetCount == false">
+        SELECT user_id as id, min(role_id) as role_id, account, cname as name, mail,
+        IF(status = 0, 'active', 'inactive') AS `status`
+      </when>
+    </choose>
+    FROM
+    (
+    SELECT users.user_id, community_role.role_id, users.account, users.cname, users.mail,
+      users.status, community_role.is_application_group, fr_role_id, fu_user_id
+    FROM dms_community.v_user_w_group users
+      INNER JOIN dms_community.community_role as community_role ON users.gid=community_role.group_id
+      INNER JOIN dms_community.forums as f ON f.community_id=community_role.community_id
+      LEFT JOIN
+        (SELECT MIN(fr.role_id) AS fr_role_id, fr.forum_id, fu.user_id AS fu_user_id
+        FROM (SELECT * FROM forum_role WHERE forum_id = #{forumId}) AS fr
+        INNER JOIN v_user_w_group AS fu ON fr.group_id = fu.gid
+        GROUP by fr.forum_id, fu.user_id) AS fusers ON users.user_id = fusers.fu_user_id
+    WHERE f.forum_id = #{forumId}
+      AND f.forum_type = 'private'
+      AND fr_role_id IS NULL
+    ) AS full_member
+    where (1+1 > 0)
+    <if test="userIdList != null and userIdList.size() > 0">
+      and user_id IN
+      <foreach item="item" index="index" collection="userIdList" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="excludeUserIdList != null and excludeUserIdList.size() > 0">
+      and user_id NOT IN
+      <foreach item="item" index="index" collection="excludeUserIdList" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="roleIdList != null and roleIdList.size() > 0">
+      and role_id IN
+      <foreach item="item" index="index" collection="roleIdList" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+    <if test="name != '' and  name != null">
+      and upper(cname) LIKE CONCAT('%',upper(#{name}),'%')
+    </if>
+    <if test="toIncludeDmsMember == false">
+      and is_application_group = 1
+    </if>
+    <if test="toGetCount == false">
+      GROUP BY user_id
+      ORDER BY
+      <choose>
+        <when test="sortField == 'role'">
+          +role_id, +cname
+        </when>
+        <otherwise>
+          +cname
+        </otherwise>
+      </choose>
+      <if test="limit >= 0 and offset >= 0">
+        LIMIT #{offset},#{limit}
+      </if>
+    </if>
+  </select>
+
+  <select id="checkDuplicateForumName" resultType="Integer">
+    SELECT COUNT(*)
+    FROM
+    dms_community.forums
+    WHERE
+    <if test="originalName != ''">
+      forum_name != #{originalName} AND 
+    </if>
+    forum_name = #{forumName} AND community_id = #{communityId} AND forum_status != 'delete'
+  </select>
+
+  <insert id="addTagIntoForumTag">
+    INSERT INTO
+    dms_community.forum_tag
+    (forum_id, forum_tag)
+    VALUES
+    <foreach collection="forumTags" item="item" index="index" open="(" separator="),(" close=")">
+      #{forumId}, #{item}
+    </foreach>
+    ON DUPLICATE KEY UPDATE forum_id=forum_id, forum_tag=forum_tag
+  </insert>
+
+  <delete id="deleteAllMemberByforumId">
+    DELETE FROM
+    dms_community.forum_role
+    WHERE forum_id=#{forumId}
+  </delete>
+
+  <delete id="deleteAllTags">
+    DELETE FROM
+    dms_community.forum_tag
+    WHERE forum_id=#{forumId}
+  </delete>
+
+  <update id="updateLastModifiedOfForum">
+    UPDATE dms_community.forums
+    SET forum_last_modified_user_id = #{userId}, forum_last_modified_time = #{time}
+    WHERE
+    forum_id = #{forumId}
+  </update>
+
+  <select id="getTagOfForum" resultType="com.delta.dms.community.swagger.model.Tag">
+    SELECT DISTINCT forum_tag as label
+    FROM dms_community.forum_tag
+    WHERE
+    forum_id=#{forumId}
+  </select>
+
+  <delete id="deleteAllMemberJoinApplicationOfForum">
+    DELETE FROM
+    dms_community.forum_join_review
+    WHERE forum_id=#{forumId};
+  </delete>
+
+  <select id="countMaxNumberOfTopForum" resultType="int">
+    SELECT count(*)
+    FROM dms_community.forums where community_id=#{communityId} AND
+    forum_status!='delete' AND forum_topping_order!=0
+  </select>
+
+  <update id="updateTopForum">
+    UPDATE dms_community.forums AS forum
+    CROSS JOIN ( SELECT MAX(forum_topping_order) AS max_number FROM dms_community.forums where community_id=#{communityId}) as max
+    SET forum.forum_topping_order = max.max_number + 1
+    where forum.forum_id=#{forumId} AND forum.forum_topping_order = 0
+  </update>
+
+  <update id="updateNormalForum">
+    UPDATE dms_community.forums SET forum_topping_order = forum_topping_order - 1 WHERE forum_topping_order > (SELECT x.forum_topping_order FROM (SELECT
+    forum_topping_order FROM dms_community.forums WHERE forum_id = #{forumId}) x) AND community_id = (SELECT y.community_id FROM (SELECT community_id
+    FROM dms_community.forums WHERE forum_id = #{forumId}) y);
+    UPDATE dms_community.forums SET forum_topping_order = 0 WHERE forum_id = #{forumId} AND forum_status != 'delete' AND forum_topping_order != 0;
+  </update>
+
+  <update id="swapPriorityOfForum">
+    UPDATE dms_community.forums
+    SET forum_topping_order = (SELECT x.forum_topping_order FROM (SELECT forum_topping_order FROM dms_community.forums WHERE forum_id = #{forumId}) x)
+    WHERE community_id = (SELECT x.community_id FROM (SELECT community_id FROM dms_community.forums WHERE forum_id = #{forumId}) x) AND
+    forum_topping_order = #{toppingOrder} AND forum_status != 'delete';
+    UPDATE dms_community.forums
+    SET forum_topping_order = #{toppingOrder}
+    WHERE forum_id = #{forumId} AND forum_status != 'delete';
+  </update>
+
+  <select id="getHotForumOfCommunity" resultType="ForumInfo">
+    <!-- CTE -->
+    <include refid="com.delta.dms.community.dao.CommonDao.topicWithScore"/>
+
+    <!--   因為CTE是串接的，所以後面要某些欄位，前面也要撈出那個欄位，就熱門討論區來說最後挑選的時候在用topic id把主題其他需要的欄位撈出來就好(要join table的方式在最後撈資料) -->
+    SELECT
+      forums.forum_id, forums.community_id, forums.forum_type, forums.forum_name, forums.forum_desc, forums.forum_img_avatar,
+      forums.forum_status, forums.forum_create_user_id, forums.forum_create_time, forums.forum_modified_user_id,
+      forums.forum_modified_time, forums.forum_delete_user_id, forums.forum_delete_time, forums.forum_last_topic_id,
+      forums.forum_last_modified_user_id, forums.forum_last_modified_time, forums.forum_ddf_id, forums.forum_topping_order,
+      SUM(twc.topic_view_count) AS count
+    FROM forums
+    INNER JOIN topic_with_score twc
+    ON forums.forum_id = twc.forum_id
+    GROUP BY twc.forum_id
+    ORDER BY SUM(twc.score) DESC
+    LIMIT #{offset},#{limit};
+  </select>
+
+  <select id="getPrivilegedForumOfCommunity" resultType="IdNameEntity">
+    SELECT DISTINCTROW forum_id AS id, forum_name AS name
+    FROM
+    (SELECT f.forum_id, f.forum_name, f.community_id, f.forum_last_modified_time,
+    CASE
+    WHEN f.forum_type = "system" THEN 1
+    WHEN f.forum_type = "public" THEN 1
+    WHEN f.forum_type = "private" THEN
+    CASE
+    WHEN #{isSysAdmin} THEN 1
+    WHEN cr_role.role_id = 1 THEN 1
+    WHEN fr_role.role_id = 3 THEN 1
+    WHEN fr_role.role_id = 4 THEN 1
+    ELSE 0
+    END
+    ELSE 0
+    END as has_permission
+    FROM dms_community.forums f
+      LEFT JOIN (
+        SELECT cr.community_id, cr.role_id, users.user_id
+        FROM dms_community.community_role cr
+          INNER JOIN dms_community.v_user_w_group as users on cr.group_id = users.gid
+        WHERE cr.community_id = #{communityId} AND FIND_IN_SET(users.user_id, #{userId})
+      ) AS cr_role ON f.community_id  = cr_role.community_id
+    LEFT JOIN (
+      SELECT forums.community_id, forums.forum_id, fr.role_id, fusers.user_id
+      FROM dms_community.forum_role fr
+        INNER JOIN dms_community.v_user_w_group as fusers on fr.group_id = fusers.gid
+        INNER JOIN dms_community.forums ON forums.forum_id = fr.forum_id
+      WHERE forums.community_id = #{communityId} AND FIND_IN_SET(fusers.user_id, #{userId})
+    ) AS fr_role ON f.forum_id  = fr_role.forum_id
+    WHERE f.community_id = #{communityId} AND f.forum_status != "delete"
+    ) pr
+    WHERE pr.community_id = #{communityId} AND pr.has_permission = 1
+    ORDER BY forum_name
+  </select>
+
+  <select id="getToppingForumOfCommunity" resultType="ForumInfo">
+    SELECT *
+    FROM dms_community.forums
+    WHERE
+    community_id = #{communityId}
+    AND forum_status != 'delete' AND forum_topping_order != 0
+    ORDER BY forum_topping_order DESC
+    <if test="limit >= 0 and offset >= 0">
+      LIMIT #{offset},#{limit}
+    </if>
+  </select>
+  
+  <select id="getApplicantForumsByUserId" resultType="Integer">
+    SELECT forum_id
+    FROM forum_join_review
+    WHERE application_id = #{userId} AND status=''
+  </select>
+
+  <select id="getForumRole" resultType="RoleDetailEntity">
+    SELECT group_id, forum_id, role_id
+    FROM
+    (
+    SELECT group_id, forum_id, role_id
+    FROM dms_community.forum_role
+    where forum_role.forum_id =#{forumId}
+    UNION
+    SELECT group_id, forum_id, role_id
+    FROM dms_community.community_role
+      INNER JOIN dms_community.forums as f ON f.community_id=community_role.community_id
+    where f.forum_id =#{forumId}
+    ) AS full_member
+    WHERE forum_id=#{forumId}
+      AND group_id IS NOT NULL
+      AND group_id != ''
+    <if test="roleIdList != null and roleIdList.size() > 0">
+      and role_id IN
+      <foreach item="item" index="index" collection="roleIdList" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+  </select>
+
+  <select id="getMainGroupRoleListOfForum" resultType="RoleDetailEntity">
+    SELECT group_id, forum_id, role_id
+    FROM
+    (
+    SELECT group_id, forum_id, role_id
+    FROM dms_community.forum_role
+    where forum_role.forum_id =#{forumId}
+    UNION
+    SELECT group_id, forum_id, role_id
+    FROM dms_community.community_role
+    INNER JOIN dms_community.forums as f ON f.community_id=community_role.community_id
+    WHERE f.forum_id = #{forumId}
+    AND (is_application_group = 1 OR (is_application_group = 0 AND is_from_group_list = 0))
+    ) AS full_member
+    WHERE forum_id=#{forumId}
+    AND group_id IS NOT NULL
+    AND group_id != ''
+    <if test="roleIdList != null and roleIdList.size() > 0">
+      and role_id IN
+      <foreach item="item" index="index" collection="roleIdList" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+  </select>
+
+  <select id="getRolesByForumIds" resultType="RoleDetailEntity">
+    SELECT forum_id AS scope_id, role_id
+    FROM
+    (
+    SELECT group_id, forum_id, role_id, users.user_id
+    FROM dms_community.forum_role
+      LEFT JOIN dms_community.v_user_w_group users ON users.gid=forum_role.group_id
+    where forum_role.forum_id IN
+    <foreach collection="forumIds" item="item" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+    UNION
+    SELECT group_id, forum_id, role_id, users.user_id
+    FROM dms_community.community_role
+      LEFT JOIN dms_community.v_user_w_group users ON users.gid=community_role.group_id
+      LEFT JOIN dms_community.forums as f ON f.community_id=community_role.community_id
+    where f.forum_id IN
+    <foreach collection="forumIds" item="item" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+    ) AS full_member
+    WHERE user_id = #{userId} AND forum_id IN
+    <foreach collection="forumIds" item="item" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+  </select>
+
+  <select id="getUnintegratedUid" resultType="RoleDetailEntity">
+    SELECT group_id, user_id, forum_id, role_id
+    FROM dms_community.forum_role
+    WHERE (group_id IS NULL or group_id = '' )
+      AND (user_id IS NOT NULL or user_id = '' )
+    LIMIT 100
+  </select>
+
+  <select id="getForumWithNoAppGroup" resultType="ForumInfo">
+    SELECT forums.forum_id, appGroupCount
+    FROM dms_community.forums
+        LEFT JOIN (SELECT forum_id, COUNT(*) AS appGroupCount
+        FROM forum_role
+        WHERE group_id IS NOT NULL AND group_id != '' AND role_id = #{roleId}
+        GROUP BY forum_id) AS roleSummary
+      ON forums.forum_id = roleSummary.forum_id
+    WHERE appGroupCount IS NULL
+    LIMIT 100
+  </select>
+
+  <select id="getAllForumRoleByCommunity" resultType="RoleDetailEntity">
+    SELECT forum_role.group_id, forum_role.forum_id, forum_role.role_id
+    FROM dms_community.forum_role
+      INNER JOIN dms_community.forums ON forum_role.forum_id = forums.forum_id
+    WHERE (group_id IS NOT NULL or group_id != '' )
+      AND (community_id = #{communityId})
+  </select>
+
+  <update id="updateForumGroupId">
+    UPDATE dms_community.forum_role
+    SET group_id = #{groupId}
+    WHERE forum_id = #{forumId}
+    AND user_id = #{userId}
+    AND role_id = #{roleId}
+  </update>
+
+  <select id="getAll" resultType="ForumInfo">
+    SELECT
+    forum_id
+    FROM
+    dms_community.forums
+  </select>
+
+  <select id="getUserGroupMissingInfo" resultType="RoleDetailEntity">
+    SELECT *
+    FROM dms_community_0302_0800.forum_role
+    LEFT JOIN (
+    SELECT bg.gid, gm.uid
+    FROM usergroup.group_member gm
+    INNER JOIN usergroup.base_group bg ON gm.`_gid` = bg.`_gid`) current
+    ON forum_role.user_id = current.uid AND forum_role.group_id = current.gid
+    WHERE  (forum_id = #{forumId})
+    AND forum_role.user_id != ''
+    AND (current.gid IS NULL)
+  </select>
+
+  <select id="getForumIdsByCommunityId" resultType="int">
+    SELECT forum_id
+    FROM forums
+    WHERE community_id = #{communityId}
+  </select>
+
+</mapper>
